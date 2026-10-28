@@ -93,28 +93,48 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-    v_clean_name TEXT;
-    v_clean_mobile TEXT;
-    v_clean_dob TEXT;
-    v_admin RECORD;
+    v_clean_name    TEXT;
+    v_clean_mobile  TEXT;
+    v_clean_dob     TEXT;
+    v_dob_alt       TEXT;
+    v_admin         RECORD;
     v_session_token TEXT;
-    v_session_id UUID;
+    v_session_id    UUID;
 BEGIN
     v_clean_name := LOWER(TRIM(REGEXP_REPLACE(p_name, '\s+', ' ', 'g')));
     v_clean_mobile := REGEXP_REPLACE(p_mobile, '[^0-9]', '', 'g');
-    v_clean_dob := TRIM(REPLACE(p_dob, '/', '-'));
+    v_clean_dob    := TRIM(REPLACE(p_dob, '/', '-'));
+
+    -- Normalise: browser always sends YYYY-MM-DD; DB may store DD-MM-YYYY.
+    -- Build the opposite format so we can match either way.
+    IF v_clean_dob ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN
+        -- Input is YYYY-MM-DD -> also try DD-MM-YYYY
+        v_dob_alt := SUBSTRING(v_clean_dob, 9, 2) || '-'
+                  || SUBSTRING(v_clean_dob, 6, 2) || '-'
+                  || SUBSTRING(v_clean_dob, 1, 4);
+    ELSIF v_clean_dob ~ '^\\d{2}-\\d{2}-\\d{4}$' THEN
+        -- Input is DD-MM-YYYY -> also try YYYY-MM-DD
+        v_dob_alt := SUBSTRING(v_clean_dob, 7, 4) || '-'
+                  || SUBSTRING(v_clean_dob, 4, 2) || '-'
+                  || SUBSTRING(v_clean_dob, 1, 2);
+    ELSE
+        v_dob_alt := v_clean_dob;
+    END IF;
 
     SELECT * INTO v_admin
     FROM admin_credentials
-    WHERE LOWER(TRIM(REGEXP_REPLACE(name, '\s+', ' ', 'g'))) = v_clean_name
+    WHERE LOWER(TRIM(REGEXP_REPLACE(name, '\\s+', ' ', 'g'))) = v_clean_name
       AND (
           REGEXP_REPLACE(mobile, '[^0-9]', '', 'g') = v_clean_mobile
           OR (
-              LENGTH(v_clean_mobile) >= 10 
+              LENGTH(v_clean_mobile) >= 10
               AND RIGHT(REGEXP_REPLACE(mobile, '[^0-9]', '', 'g'), 10) = RIGHT(v_clean_mobile, 10)
           )
       )
-      AND TRIM(REPLACE(dob, '/', '-')) = v_clean_dob
+      AND (
+          TRIM(REPLACE(dob, '/', '-')) = v_clean_dob
+          OR TRIM(REPLACE(dob, '/', '-')) = v_dob_alt
+      )
     LIMIT 1;
 
     IF NOT FOUND THEN
@@ -134,10 +154,11 @@ BEGIN
         );
     END IF;
 
-    -- Generate a cryptographic session token
-    v_session_token := 'sess_' || encode(gen_random_bytes(24), 'hex');
+    -- Generate session token using gen_random_uuid() (no pgcrypto extension needed)
+    v_session_token := 'sess_'
+        || REPLACE(gen_random_uuid()::TEXT, '-', '')
+        || REPLACE(gen_random_uuid()::TEXT, '-', '');
 
-    -- Insert session
     INSERT INTO admin_sessions (
         admin_credential_id,
         admin_name,
