@@ -42,3 +42,10 @@ supabase/.temp/**
 #Local Ai coding agent skills
 .agents/
 skills-lock.json
+
+# Elephant-Goldfish Model (EGM)
+elephant-goldfish-model*/
+.egm/
+concepts_brief.md
+design_draft.md
+review_report.md
