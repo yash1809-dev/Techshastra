@@ -37,6 +37,7 @@ export const ProblemsList: React.FC = () => {
   const [submissions, setSubmissions] = useState<Submission[]>(() => getUserSubmissions(currentStudentId));
   const [search, setSearch] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState<string>("All");
+  const [yearFilter, setYearFilter] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [selectedTag, setSelectedTag] = useState<string>("All");
   const [studentProfile, setStudentProfile] = useState<{ year?: string | null; course?: string | null } | null>(null);
@@ -126,19 +127,16 @@ export const ProblemsList: React.FC = () => {
     return Array.from(set);
   }, [problems]);
 
-  // Cohort matching helper
-  const matchesStudentCohort = useMemo(() => {
+  // Year / Cohort matching helper
+  const matchesSelectedYear = useMemo(() => {
     return (prob: Problem) => {
+      if (yearFilter === "All") return true;
+
       const probCohort = (prob.targetYear || prob.targetSemester) as string | undefined;
-      // If problem is marked for All or All Years, or unspecified, visible to everyone
       if (!probCohort || probCohort === "All" || probCohort === "All Years" || probCohort === "All Semesters") {
         return true;
       }
-      // If student is not logged in or has no academic year recorded, show all
-      if (!studentAcademicYear) {
-        return true;
-      }
-      // Normalize problem cohort
+
       const cleanProb = probCohort.trim().toLowerCase();
       let probYear: string | null = null;
       if (cleanProb.includes("1") || cleanProb.includes("first") || cleanProb.includes("sem 1") || cleanProb.includes("sem 2")) {
@@ -150,9 +148,10 @@ export const ProblemsList: React.FC = () => {
       } else if (cleanProb.includes("4") || cleanProb.includes("fourth") || cleanProb.includes("final") || cleanProb.includes("sem 7") || cleanProb.includes("sem 8")) {
         probYear = "4th Year";
       }
-      return probYear === studentAcademicYear;
+
+      return probYear === yearFilter;
     };
-  }, [studentAcademicYear]);
+  }, [yearFilter]);
 
   // Filtered problems
   const filteredProblems = useMemo(() => {
@@ -167,8 +166,8 @@ export const ProblemsList: React.FC = () => {
       const matchesDifficulty =
         difficultyFilter === "All" || p.difficulty === difficultyFilter;
 
-      // Cohort matching based on student's registered year (automatic)
-      const matchesCohort = matchesStudentCohort(p);
+      // Year / Cohort selection
+      const matchesYear = matchesSelectedYear(p);
 
       // Status
       const isSolved = solvedProblemIds.has(p.id);
@@ -183,13 +182,13 @@ export const ProblemsList: React.FC = () => {
       const matchesTag =
         selectedTag === "All" || p.tags.includes(selectedTag);
 
-      return matchesSearch && matchesDifficulty && matchesCohort && matchesStatus && matchesTag;
+      return matchesSearch && matchesDifficulty && matchesYear && matchesStatus && matchesTag;
     });
   }, [
     problems,
     search,
     difficultyFilter,
-    matchesStudentCohort,
+    matchesSelectedYear,
     statusFilter,
     selectedTag,
     solvedProblemIds,
@@ -208,134 +207,220 @@ export const ProblemsList: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="p-3.5 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-4 sm:space-y-6 pb-28 md:pb-12 overflow-x-hidden">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
-            <Code2 className="text-primary" size={24} />
+          <h1 className="text-xl sm:text-2xl font-heading font-bold text-foreground flex items-center gap-2">
+            <Code2 className="text-primary shrink-0" size={22} />
             Faculty Assignments & Problems
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
             Solve curated algorithmic challenges, verify your test-case outputs,
             and earn points towards your campus standing.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           {studentAcademicYear && (
-            <Badge
-              variant="outline"
-              className="text-xs px-3 py-1 font-medium border-purple-500/40 text-purple-900 dark:text-purple-300 bg-purple-500/15 flex items-center gap-1.5 shadow-xs"
+            <button
+              type="button"
+              onClick={() => setYearFilter(yearFilter === studentAcademicYear ? "All" : studentAcademicYear)}
+              className="text-left"
+              title="Click to toggle filter for your year"
             >
-              <GraduationCap size={13} className="text-purple-600 dark:text-purple-400" />
-              <span>Your Curriculum: <strong>{studentAcademicYear}</strong>{studentProfile?.course ? ` · ${studentProfile.course}` : ""}</span>
-            </Badge>
+              <Badge
+                variant="outline"
+                className={`text-xs px-2.5 py-1 font-medium border-purple-500/40 cursor-pointer transition-all flex items-center gap-1.5 shadow-xs ${
+                  yearFilter === studentAcademicYear
+                    ? "bg-purple-500/25 text-purple-900 dark:text-purple-200 ring-2 ring-purple-500/40"
+                    : "text-purple-800 dark:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20"
+                }`}
+              >
+                <GraduationCap size={13} className="text-purple-600 dark:text-purple-400 shrink-0" />
+                <span className="truncate max-w-[200px] xs:max-w-none">
+                  Curriculum: <strong>{studentAcademicYear}</strong>
+                  {yearFilter === studentAcademicYear ? " (Active)" : ""}
+                </span>
+              </Badge>
+            </button>
           )}
-          <Badge variant="outline" className="text-xs px-3 py-1 font-normal">
+          <Badge variant="outline" className="text-xs px-2.5 py-1 font-normal">
             Problems: <span className="font-semibold ml-1">{filteredProblems.length}</span>
           </Badge>
-          <Badge variant="outline" className="text-xs px-3 py-1 font-normal text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+          <Badge variant="outline" className="text-xs px-2.5 py-1 font-normal text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
             Solved: <span className="font-semibold ml-1">{solvedProblemIds.size}</span>
           </Badge>
         </div>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between glass p-3.5 rounded-2xl">
-        <div className="relative flex-1 max-w-md">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search problems, keywords, or topics..."
-            className="pl-9 h-9 rounded-xl text-xs bg-background/60"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Difficulty Filter */}
-          <div className="flex items-center rounded-xl glass border border-white/30 dark:border-white/10 p-1 text-xs">
-            {["All", "Easy", "Medium", "Hard"].map((diff) => (
-              <button
-                key={diff}
-                onClick={() => setDifficultyFilter(diff)}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
-                  difficultyFilter === diff
-                    ? "bg-primary text-primary-foreground font-medium shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {diff}
-              </button>
-            ))}
+      <div className="glass p-3 sm:p-4 rounded-2xl space-y-3">
+        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 items-stretch sm:items-center justify-between">
+          <div className="relative flex-1">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search problems, keywords, or topics..."
+              className="pl-9 h-9 rounded-xl text-xs bg-background/60 w-full"
+            />
           </div>
 
-          {/* Status Filter */}
-          <div className="flex items-center rounded-xl glass border border-white/30 dark:border-white/10 p-1 text-xs">
-            {["All", "Solved", "Unsolved"].map((st) => (
-              <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
-                  statusFilter === st
-                    ? "bg-primary text-primary-foreground font-medium shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {st}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Difficulty Filter */}
+            <div className="flex items-center rounded-xl glass border border-white/30 dark:border-white/10 p-0.5 text-xs">
+              {["All", "Easy", "Medium", "Hard"].map((diff) => (
+                <button
+                  key={diff}
+                  onClick={() => setDifficultyFilter(diff)}
+                  className={`px-2.5 py-1 rounded-lg transition-all text-[11px] ${
+                    difficultyFilter === diff
+                      ? "bg-primary text-primary-foreground font-medium shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {diff}
+                </button>
+              ))}
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex items-center rounded-xl glass border border-white/30 dark:border-white/10 p-0.5 text-xs">
+              {["All", "Solved", "Unsolved"].map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setStatusFilter(st)}
+                  className={`px-2.5 py-1 rounded-lg transition-all text-[11px] ${
+                    statusFilter === st
+                      ? "bg-primary text-primary-foreground font-medium shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Topic Tags Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-none">
-        <span className="text-muted-foreground text-xs flex items-center gap-1 mr-1 shrink-0">
-          <Tag size={13} /> Topics:
-        </span>
-        <button
-          onClick={() => setSelectedTag("All")}
-          className={`px-2.5 py-1 rounded-lg shrink-0 transition-colors ${
-            selectedTag === "All"
-              ? "bg-primary text-primary-foreground font-medium"
-              : "bg-muted/50 text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          All Topics
-        </button>
-        {allTags.map((tag) => (
+        {/* Year Cohort Filter Row */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs scrollbar-none">
+          <span className="text-muted-foreground text-xs flex items-center gap-1 mr-1 shrink-0 font-medium">
+            <GraduationCap size={13} /> Cohort Year:
+          </span>
+          {["All", "1st Year", "2nd Year", "3rd Year", "4th Year"].map((yr) => {
+            const isStudentYr = studentAcademicYear === yr;
+            const isSelected = yearFilter === yr;
+            return (
+              <button
+                key={yr}
+                onClick={() => setYearFilter(yr)}
+                className={`px-2.5 py-1 rounded-lg shrink-0 transition-all text-[11px] flex items-center gap-1 ${
+                  isSelected
+                    ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                    : isStudentYr
+                    ? "bg-purple-500/15 text-purple-800 dark:text-purple-300 border border-purple-500/30 hover:bg-purple-500/25"
+                    : "bg-muted/50 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <span>{yr === "All" ? "All Years" : yr}</span>
+                {isStudentYr && yr !== "All" && (
+                  <span className="text-[9px] px-1 py-0 rounded bg-purple-500/20 text-purple-900 dark:text-purple-200 uppercase font-bold">You</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Topic Tags Bar */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs scrollbar-none pt-0.5 border-t border-border/30">
+          <span className="text-muted-foreground text-xs flex items-center gap-1 mr-1 shrink-0 font-medium">
+            <Tag size={12} /> Topics:
+          </span>
           <button
-            key={tag}
-            onClick={() => setSelectedTag(tag)}
-            className={`px-2.5 py-1 rounded-lg shrink-0 transition-colors ${
-              selectedTag === tag
+            onClick={() => setSelectedTag("All")}
+            className={`px-2 py-0.5 rounded-lg shrink-0 transition-colors text-[11px] ${
+              selectedTag === "All"
                 ? "bg-primary text-primary-foreground font-medium"
                 : "bg-muted/50 text-muted-foreground hover:text-foreground"
             }`}
           >
-            {tag}
+            All Topics
           </button>
-        ))}
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => setSelectedTag(tag)}
+              className={`px-2 py-0.5 rounded-lg shrink-0 transition-colors text-[11px] ${
+                selectedTag === tag
+                  ? "bg-primary text-primary-foreground font-medium"
+                  : "bg-muted/50 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Active filters notice if questions count is 0 */}
+      {filteredProblems.length === 0 && problems.length > 0 && (
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-amber-900 dark:text-amber-200">
+          <span>
+            No problems match your current filter selection ({yearFilter !== "All" ? `Cohort: ${yearFilter}` : ""}
+            {difficultyFilter !== "All" ? ` · Difficulty: ${difficultyFilter}` : ""}
+            {search ? ` · Query: "${search}"` : ""}).
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setSearch("");
+              setDifficultyFilter("All");
+              setYearFilter("All");
+              setStatusFilter("All");
+              setSelectedTag("All");
+            }}
+            className="text-xs h-7 rounded-lg border-amber-500/40 hover:bg-amber-500/20 w-fit shrink-0"
+          >
+            Show All ({problems.length}) Problems
+          </Button>
+        </div>
+      )}
 
       {/* Problems List / Table */}
       <div className="space-y-2.5">
         {filteredProblems.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl glass">
+          <div className="p-8 sm:p-12 text-center rounded-2xl glass">
             <Code2 size={32} className="mx-auto text-muted-foreground mb-3" />
-            <h3 className="font-heading font-medium text-foreground">
-              {problems.length === 0 ? "No Problems Published Yet" : "No problems found"}
+            <h3 className="font-heading font-medium text-foreground text-sm sm:text-base">
+              {problems.length === 0 ? "No Problems Published Yet" : "No matching problems found"}
             </h3>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
               {problems.length === 0
                 ? "Faculty administrators haven't published any coding challenges yet. Check back soon!"
-                : "Try adjusting your search criteria, difficulty filter, or tag selection."}
+                : "Try adjusting your search query or reset your year and difficulty filters."}
             </p>
+            {problems.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setSearch("");
+                  setDifficultyFilter("All");
+                  setYearFilter("All");
+                  setStatusFilter("All");
+                  setSelectedTag("All");
+                }}
+                className="mt-4 text-xs rounded-xl"
+              >
+                Reset All Filters
+              </Button>
+            )}
           </div>
         ) : (
           filteredProblems.map((prob) => {
@@ -345,32 +430,32 @@ export const ProblemsList: React.FC = () => {
             return (
               <div
                 key={prob.id}
-                className="group p-4 rounded-xl glass hover:bg-primary/5 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                className="group p-3.5 sm:p-4 rounded-xl glass hover:bg-primary/5 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 overflow-hidden"
               >
-                <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+                <div className="flex items-start sm:items-center gap-3 min-w-0">
                   {/* Status Icon */}
                   <div className="mt-0.5 sm:mt-0 flex-shrink-0">
                     {isSolved ? (
-                      <div className="w-7 h-7 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                        <CheckCircle2 size={16} />
+                      <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                        <CheckCircle2 size={15} />
                       </div>
                     ) : isAttempted ? (
-                      <div className="w-7 h-7 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center">
-                        <Clock size={16} />
+                      <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                        <Clock size={15} />
                       </div>
                     ) : (
-                      <div className="w-7 h-7 rounded-full bg-muted text-muted-foreground/50 flex items-center justify-center text-xs font-mono">
+                      <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-muted text-muted-foreground/50 flex items-center justify-center text-xs font-mono">
                         ○
                       </div>
                     )}
                   </div>
 
                   {/* Title & metadata */}
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <Link
                         to={`/student/problems/${prob.id}`}
-                        className="font-heading font-semibold text-sm sm:text-base text-foreground group-hover:text-primary transition-colors hover:underline"
+                        className="font-heading font-semibold text-sm sm:text-base text-foreground group-hover:text-primary transition-colors hover:underline truncate max-w-[240px] xs:max-w-none"
                       >
                         {prob.title}
                       </Link>
@@ -387,7 +472,7 @@ export const ProblemsList: React.FC = () => {
                         variant="outline"
                         className="text-[10px] px-2 py-0.5 border-purple-500/30 text-purple-800 dark:text-purple-300 bg-purple-500/10 font-medium flex items-center gap-1"
                       >
-                        <GraduationCap size={11} />
+                        <GraduationCap size={10} />
                         {prob.targetYear && prob.targetYear !== "All"
                           ? prob.targetYear
                           : prob.targetSemester && prob.targetSemester !== "All"
@@ -400,20 +485,20 @@ export const ProblemsList: React.FC = () => {
                       </span>
                     </div>
 
-                    <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
+                    <p className="text-xs text-muted-foreground line-clamp-2 sm:line-clamp-1 mt-1 break-words">
                       {prob.description}
                     </p>
 
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 mt-2">
                       {prob.tags.map((t) => (
                         <span
                           key={t}
-                          className="text-[10px] px-2 py-0.2 rounded-md bg-muted text-muted-foreground"
+                          className="text-[10px] px-2 py-0.5 rounded-md bg-muted text-muted-foreground"
                         >
                           {t}
                         </span>
                       ))}
-                      <span className="text-[10px] text-muted-foreground/70 ml-2">
+                      <span className="text-[10px] text-muted-foreground/70 ml-1 sm:ml-2">
                         Author: {prob.author}
                       </span>
                     </div>
@@ -421,7 +506,7 @@ export const ProblemsList: React.FC = () => {
                 </div>
 
                 {/* Right CTA */}
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0">
+                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t border-border/30 sm:border-0 w-full sm:w-auto">
                   <div className="text-right hidden lg:block">
                     <p className="text-[10px] text-muted-foreground">Test cases</p>
                     <p className="text-xs font-mono font-medium text-foreground">
@@ -429,11 +514,11 @@ export const ProblemsList: React.FC = () => {
                     </p>
                   </div>
 
-                  <Link to={`/student/problems/${prob.id}`}>
+                  <Link to={`/student/problems/${prob.id}`} className="w-full sm:w-auto">
                     <Button
                       size="sm"
                       variant={isSolved ? "outline" : "default"}
-                      className="rounded-xl gap-1 text-xs"
+                      className="rounded-xl gap-1 text-xs w-full sm:w-auto h-8"
                     >
                       <span>{isSolved ? "Review Code" : "Solve Challenge"}</span>
                       <ArrowRight size={13} />

@@ -78,6 +78,8 @@ import {
   GraduationCap,
   Copy,
   FileText,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 
 interface AdminProblemsTabProps {
@@ -126,6 +128,7 @@ export const AdminProblemsTab: React.FC<AdminProblemsTabProps> = ({
 
   // Modal editor state
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeDialogTab, setActiveDialogTab] = useState<"overview" | "statement" | "code">("overview");
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -1089,373 +1092,561 @@ export const AdminProblemsTab: React.FC<AdminProblemsTabProps> = ({
 
       {/* ── Create / Edit Problem Dialog ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl sm:max-w-4xl max-h-[92vh] flex flex-col p-0 overflow-hidden bg-card border border-border shadow-2xl rounded-2xl">
-          <div className="h-0.5 w-full bg-gradient-to-r from-primary to-primary/30 shrink-0" />
+        <DialogContent
+          className={`${
+            isFullscreen
+              ? "w-screen max-w-none h-screen max-h-none fixed inset-0 z-50 rounded-none border-0"
+              : "w-[98vw] max-w-[1500px] h-[95vh] max-h-[95vh] rounded-2xl border border-border shadow-2xl"
+          } flex flex-col p-0 overflow-hidden bg-card transition-all duration-200`}
+        >
+          <div className="h-0.5 w-full bg-gradient-to-r from-primary via-primary/60 to-primary/20 shrink-0" />
 
           {/* Header */}
-          <div className="px-5 py-3 border-b border-border shrink-0 flex items-center justify-between gap-3">
+          <div className="px-5 py-3 border-b border-border shrink-0 flex items-center justify-between gap-3 bg-muted/20">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <Code2 size={14} />
+              <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Code2 size={16} />
               </div>
               <div>
-                <DialogTitle className="text-sm font-semibold text-foreground">
-                  {editingId ? "Edit Problem" : "New Problem"}
+                <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <span>{editingId ? "Edit Problem" : "Create New Problem"}</span>
+                  <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary font-normal">
+                    {targetYear === "All" ? "All Cohorts" : targetYear}
+                  </Badge>
                 </DialogTitle>
                 <DialogDescription className="text-[10px] text-muted-foreground mt-0">
                   Author: <span className="font-medium text-foreground">{isSuperAdmin ? publishedBy || currentAdminName : currentAdminName}</span>
                 </DialogDescription>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Publish</span>
-              <Switch id="modal-live-switch" checked={isPublished} onCheckedChange={setIsPublished} />
-              <span className={isPublished ? "font-medium text-foreground" : "text-muted-foreground"}>
-                {isPublished ? "Live" : "Draft"}
-              </span>
+
+            <div className="flex items-center gap-3">
+              {/* Fullscreen Toggle */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg hidden sm:flex items-center gap-1.5 border border-border/60 hover:bg-muted/40"
+                title={isFullscreen ? "Exit Fullscreen" : "Open Fullscreen"}
+              >
+                {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                <span className="text-[11px] font-medium">{isFullscreen ? "Exit Fullscreen" : "Full Screen"}</span>
+              </Button>
+
+              {/* Publish Toggle */}
+              <div className="flex items-center gap-2 text-xs bg-background/80 border border-border/80 px-2.5 py-1 rounded-xl">
+                <span className="text-muted-foreground text-[11px]">Visibility</span>
+                <Switch id="modal-live-switch" checked={isPublished} onCheckedChange={setIsPublished} />
+                <span className={`text-[11px] ${isPublished ? "font-semibold text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                  {isPublished ? "Live" : "Draft"}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Scrollable body — single form, no tabs */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Body — 2-column widescreen workspace on laptop/desktop */}
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
-            {/* OCR Drop Zone */}
-            <div>
-              <input
-                ref={ocrFileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleOcrFile(file);
-                  e.target.value = "";
-                }}
-              />
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                  const file = e.dataTransfer.files?.[0];
-                  if (file) handleOcrFile(file);
-                }}
-                onClick={() => ocrFileInputRef.current?.click()}
-                className={`cursor-pointer rounded-xl border-2 border-dashed p-3 flex items-center gap-3 transition-all ${
-                  dragOver
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/50 hover:bg-muted/20"
-                }`}
-              >
-                {ocrLoading ? (
-                  <div className="flex items-center gap-3 w-full">
-                    <RefreshCw size={15} className="animate-spin text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground">{ocrStatus}</p>
-                      <div className="w-full h-1 bg-muted rounded-full overflow-hidden mt-1.5">
-                        <div className="h-full bg-primary transition-all duration-300" style={{ width: `${ocrProgress}%` }} />
+              {/* ── LEFT COLUMN: Setup, Identity, Problem Statement, Constraints (6 Cols) ── */}
+              <div className="lg:col-span-6 space-y-4">
+
+                {/* STEP 1: TARGET AUDIENCE & GRADING (YEAR FIRST!) */}
+                <div className="rounded-2xl border border-border bg-muted/20 p-4 space-y-3.5">
+                  <div className="flex items-center justify-between pb-1 border-b border-border/50">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">1</span>
+                      <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Target Cohort & Grading (Start Here)</h3>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">Logical Step 1</span>
+                  </div>
+
+                  {/* 1.1 TARGET YEAR — FIRST AND PROMINENT */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <GraduationCap size={14} className="text-primary" /> Target Student Year <span className="text-destructive">*</span>
+                      </Label>
+                      <span className="text-[10px] text-muted-foreground">Who should solve this?</span>
+                    </div>
+
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {COHORT_YEAR_PRESETS.map((yr) => {
+                        const isSelected = targetYear === yr;
+                        return (
+                          <button
+                            key={yr}
+                            type="button"
+                            onClick={() => setTargetYear(yr as TargetYear)}
+                            className={`py-2 px-1 text-xs rounded-xl border font-medium transition-all text-center ${
+                              isSelected
+                                ? "border-primary bg-primary text-primary-foreground shadow-sm font-semibold"
+                                : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                            }`}
+                          >
+                            {yr === "All" ? "All Years" : yr}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 1.2 CATEGORY, DIFFICULTY, POINTS */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Category */}
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium text-foreground">Category / Domain</Label>
+                      <Input
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        placeholder="e.g. Arrays, Dynamic Programming"
+                        className="h-8 text-xs rounded-xl bg-background border-border"
+                      />
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {CATEGORY_PRESETS.slice(0, 4).map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setCategory(cat)}
+                            className={`text-[10px] px-2 py-0.5 rounded border transition-all ${
+                              category === cat
+                                ? "border-primary/60 bg-primary/10 text-primary font-medium"
+                                : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                    <span className="text-[10px] font-mono text-muted-foreground">{ocrProgress}%</span>
-                  </div>
-                ) : (
-                  <>
-                    <UploadCloud size={15} className="text-muted-foreground shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-foreground">
-                        Drop question screenshot → <span className="text-primary">auto-fill via OCR</span>
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">PNG, JPG, JPEG — extracts title, description, constraints, year.</p>
+
+                    {/* Difficulty & Points */}
+                    <div className="space-y-2">
+                      <div>
+                        <Label className="text-xs font-medium text-foreground">Difficulty Level</Label>
+                        <div className="flex gap-1 mt-1">
+                          {(["Easy", "Medium", "Hard"] as ProblemDifficulty[]).map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => setDifficulty(d)}
+                              className={`flex-1 py-1.5 text-xs rounded-xl border font-medium transition-all ${
+                                difficulty === d
+                                  ? "border-primary bg-primary/15 text-primary font-semibold shadow-xs"
+                                  : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                              }`}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs font-medium text-foreground">Scoring Points</Label>
+                        <div className="flex gap-1 items-center mt-1">
+                          {POINTS_PRESETS.map((pts) => (
+                            <button
+                              key={pts}
+                              type="button"
+                              onClick={() => setPoints(pts)}
+                              className={`flex-1 py-1 text-[11px] rounded-lg border font-mono font-medium transition-all ${
+                                points === pts
+                                  ? "border-primary bg-primary text-primary-foreground font-semibold"
+                                  : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                              }`}
+                            >
+                              {pts}
+                            </button>
+                          ))}
+                          <Input
+                            type="number"
+                            value={points}
+                            onChange={(e) => setPoints(Number(e.target.value))}
+                            className="w-14 h-[29px] text-[11px] font-mono rounded-lg border-border bg-background px-1.5"
+                            placeholder="pts"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    {ocrRawText && (
+                  </div>
+                </div>
+
+                {/* STEP 2: PROBLEM DETAILS & OCR EXTRACTION */}
+                <div className="rounded-2xl border border-border bg-muted/20 p-4 space-y-3.5">
+                  <div className="flex items-center justify-between pb-1 border-b border-border/50">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">2</span>
+                      <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Problem Title & Statement</h3>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">Logical Step 2</span>
+                  </div>
+
+                  {/* OCR Drop Zone */}
+                  <div>
+                    <input
+                      ref={ocrFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleOcrFile(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOver(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) handleOcrFile(file);
+                      }}
+                      onClick={() => ocrFileInputRef.current?.click()}
+                      className={`cursor-pointer rounded-xl border-2 border-dashed p-3 flex items-center gap-3 transition-all ${
+                        dragOver
+                          ? "border-primary bg-primary/5"
+                          : "border-border bg-background hover:border-primary/50 hover:bg-muted/30"
+                      }`}
+                    >
+                      {ocrLoading ? (
+                        <div className="flex items-center gap-3 w-full">
+                          <RefreshCw size={16} className="animate-spin text-primary shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground">{ocrStatus}</p>
+                            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mt-1.5">
+                              <div className="h-full bg-primary transition-all duration-300" style={{ width: `${ocrProgress}%` }} />
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-foreground">{ocrProgress}%</span>
+                        </div>
+                      ) : (
+                        <>
+                          <UploadCloud size={16} className="text-primary shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-foreground">
+                              Drop question screenshot → <span className="text-primary font-semibold">auto-fill via OCR</span>
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">PNG, JPG — extracts problem title, description, constraints & examples.</p>
+                          </div>
+                          {ocrRawText && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setShowRawOcr(!showRawOcr); }}
+                              className="text-[10px] text-primary hover:underline shrink-0"
+                            >
+                              {showRawOcr ? "Hide raw" : "View raw"}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {showRawOcr && ocrRawText && (
+                      <Textarea rows={3} value={ocrRawText} readOnly
+                        className="mt-2 text-[11px] font-mono bg-muted/40 border-border rounded-xl" />
+                    )}
+                  </div>
+
+                  {/* Title */}
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-foreground">
+                      Problem Title <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="e.g. Two Sum, Valid Palindrome, Binary Search Tree"
+                      className="h-9 text-xs rounded-xl bg-background border-border font-medium focus-visible:ring-primary/30"
+                    />
+                  </div>
+
+                  {/* Problem Statement */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-foreground">
+                        Problem Statement <span className="text-destructive">*</span>
+                      </Label>
+                      <button type="button" onClick={insertStandardDescriptionTemplate}
+                        className="text-[10px] text-primary hover:underline flex items-center gap-1 font-medium">
+                        <Sparkles size={11} /> Insert standard template
+                      </button>
+                    </div>
+                    <Textarea
+                      rows={7}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Describe the challenge clearly with problem background, inputs, outputs, and examples..."
+                      className="text-xs rounded-xl bg-background border-border focus-visible:ring-primary/30 p-3 leading-relaxed resize-y"
+                    />
+                  </div>
+
+                  {/* Constraints & Tags */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium text-foreground">
+                        Constraints <span className="text-muted-foreground font-normal">(one per line)</span>
+                      </Label>
+                      <Textarea
+                        rows={3}
+                        value={constraintsText}
+                        onChange={(e) => setConstraintsText(e.target.value)}
+                        placeholder={"1 <= nums.length <= 10^4\n-10^9 <= nums[i] <= 10^9"}
+                        className="text-xs font-mono rounded-xl bg-background border-border focus-visible:ring-primary/30 p-2.5 resize-y"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium text-foreground">
+                        Tags <span className="text-muted-foreground font-normal">(comma-separated)</span>
+                      </Label>
+                      <Input
+                        value={tagsText}
+                        onChange={(e) => setTagsText(e.target.value)}
+                        placeholder="Array, Two Pointers, Hash Table"
+                        className="h-8 text-xs rounded-xl bg-background border-border focus-visible:ring-primary/30"
+                      />
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {TAG_PRESETS.slice(0, 6).map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => {
+                              const cur = tagsText.split(",").map((t) => t.trim()).filter(Boolean);
+                              if (!cur.includes(tag)) setTagsText([...cur, tag].join(", "));
+                            }}
+                            className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all"
+                          >
+                            +{tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* ── RIGHT COLUMN: Starter Code, Test Cases, Author Override (6 Cols) ── */}
+              <div className="lg:col-span-6 space-y-4">
+
+                {/* STEP 3: STARTER CODE & TEMPLATES */}
+                <div className="rounded-2xl border border-border bg-muted/20 p-4 space-y-3.5">
+                  <div className="flex items-center justify-between pb-1 border-b border-border/50">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">3</span>
+                      <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Starter Code & Evaluation</h3>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">Logical Step 3</span>
+                  </div>
+
+                  {/* Starter Code Box */}
+                  <div className="rounded-xl border border-border bg-background overflow-hidden shadow-xs">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
+                      <Label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                        <Code2 size={13} className="text-primary" /> Starter Code Template
+                      </Label>
+                      <div className="flex items-center rounded-lg border border-border p-0.5 gap-0.5 bg-background">
+                        {(["python", "javascript", "cpp"] as const).map((lang) => (
+                          <button
+                            key={lang}
+                            type="button"
+                            onClick={() => setActiveCodeLang(lang)}
+                            className={`px-3 py-0.5 rounded-md text-[11px] transition-all ${
+                              activeCodeLang === lang
+                                ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {lang === "python" ? "Python" : lang === "javascript" ? "JavaScript" : "C++"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="px-3 py-1 flex items-center justify-between bg-muted/20 border-b border-border/60">
+                      <span className="text-[10px] font-mono text-muted-foreground">
+                        {activeCodeLang === "python" && "main.py"}
+                        {activeCodeLang === "javascript" && "solution.js"}
+                        {activeCodeLang === "cpp" && "solution.cpp"}
+                      </span>
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); setShowRawOcr(!showRawOcr); }}
-                        className="ml-auto text-[10px] text-primary hover:underline shrink-0"
+                        onClick={() => {
+                          const d = getDefaultStarterCode();
+                          if (activeCodeLang === "python") setPythonCode(d.python);
+                          if (activeCodeLang === "javascript") setJavascriptCode(d.javascript);
+                          if (activeCodeLang === "cpp") setCppCode(d.cpp);
+                        }}
+                        className="text-[10px] text-muted-foreground hover:text-primary hover:underline"
                       >
-                        {showRawOcr ? "Hide raw" : "View raw"}
+                        Reset to default template
                       </button>
-                    )}
-                  </>
-                )}
-              </div>
-              {showRawOcr && ocrRawText && (
-                <Textarea rows={3} value={ocrRawText} readOnly
-                  className="mt-2 text-[11px] font-mono bg-muted/40 border-border rounded-xl" />
-              )}
-            </div>
+                    </div>
 
-            {/* Title & Category */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-medium text-foreground">
-                  Title <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Two Sum, Binary Search"
-                  className="h-8 text-xs rounded-xl bg-background border-border focus-visible:ring-primary/30"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-medium text-foreground">Category</Label>
-                <Input
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder="e.g. Arrays, Dynamic Programming"
-                  className="h-8 text-xs rounded-xl bg-background border-border focus-visible:ring-primary/30"
-                />
-                <div className="flex flex-wrap gap-1 pt-0.5">
-                  {CATEGORY_PRESETS.map((cat) => (
-                    <button key={cat} type="button" onClick={() => setCategory(cat)}
-                      className={`text-[10px] px-1.5 py-0.5 rounded border transition-all ${
-                        category === cat
-                          ? "border-primary/60 bg-primary/10 text-primary font-medium"
-                          : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                      }`}
-                    >{cat}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Difficulty · Points · Target Year */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-medium text-foreground">Difficulty</Label>
-                <div className="flex gap-1">
-                  {(["Easy", "Medium", "Hard"] as ProblemDifficulty[]).map((d) => (
-                    <button key={d} type="button" onClick={() => setDifficulty(d)}
-                      className={`flex-1 py-1.5 text-[11px] rounded-lg border font-medium transition-all ${
-                        difficulty === d
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
-                      }`}
-                    >{d}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-medium text-foreground">Points</Label>
-                <div className="flex gap-1 items-center">
-                  {POINTS_PRESETS.map((pts) => (
-                    <button key={pts} type="button" onClick={() => setPoints(pts)}
-                      className={`flex-1 py-1.5 text-[11px] rounded-lg border font-mono font-medium transition-all ${
-                        points === pts
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
-                      }`}
-                    >{pts}</button>
-                  ))}
-                  <Input type="number" value={points} onChange={(e) => setPoints(Number(e.target.value))}
-                    className="flex-1 h-[30px] text-[11px] font-mono rounded-lg border-border bg-background" placeholder="pts" />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs font-medium text-foreground">Target Year</Label>
-                <Select value={targetYear} onValueChange={(v) => setTargetYear(v as TargetYear)}>
-                  <SelectTrigger className="h-8 text-xs rounded-xl border-border bg-background">
-                    <SelectValue placeholder="All Years" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COHORT_YEAR_PRESETS.map((yr) => (
-                      <SelectItem key={yr} value={yr}>{yr === "All" ? "All Years" : yr}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Problem Statement */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium text-foreground">
-                  Problem Statement <span className="text-destructive">*</span>
-                </Label>
-                <button type="button" onClick={insertStandardDescriptionTemplate}
-                  className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
-                  <Sparkles size={10} /> Insert template
-                </button>
-              </div>
-              <Textarea
-                rows={6}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe the problem, input/output format, and examples..."
-                className="text-xs rounded-xl bg-background border-border focus-visible:ring-primary/30 p-3 resize-y"
-              />
-            </div>
-
-            {/* Constraints & Tags */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-medium text-foreground">
-                  Constraints <span className="text-muted-foreground font-normal">(one per line)</span>
-                </Label>
-                <Textarea rows={3} value={constraintsText} onChange={(e) => setConstraintsText(e.target.value)}
-                  placeholder={"1 <= nums.length <= 10^4\n-10^9 <= nums[i] <= 10^9"}
-                  className="text-xs font-mono rounded-xl bg-background border-border focus-visible:ring-primary/30 p-3" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-medium text-foreground">
-                  Tags <span className="text-muted-foreground font-normal">(comma-separated)</span>
-                </Label>
-                <Input value={tagsText} onChange={(e) => setTagsText(e.target.value)}
-                  placeholder="Array, Two Pointers, Hash Table"
-                  className="h-8 text-xs rounded-xl bg-background border-border focus-visible:ring-primary/30" />
-                <div className="flex flex-wrap gap-1 pt-0.5">
-                  {TAG_PRESETS.map((tag) => (
-                    <button key={tag} type="button"
-                      onClick={() => {
-                        const cur = tagsText.split(",").map((t) => t.trim()).filter(Boolean);
-                        if (!cur.includes(tag)) setTagsText([...cur, tag].join(", "));
-                      }}
-                      className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all">
-                      +{tag}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Starter Code */}
-            <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/40">
-                <Label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                  <Code2 size={12} className="text-muted-foreground" /> Starter Code
-                </Label>
-                <div className="flex items-center rounded-lg border border-border p-0.5 gap-0.5 bg-background">
-                  {(["python", "javascript", "cpp"] as const).map((lang) => (
-                    <button key={lang} type="button" onClick={() => setActiveCodeLang(lang)}
-                      className={`px-2.5 py-0.5 rounded-md text-[11px] transition-all ${
-                        activeCodeLang === lang
-                          ? "bg-primary text-primary-foreground font-semibold"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}>
-                      {lang === "python" ? "Python" : lang === "javascript" ? "JS" : "C++"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="px-1 pt-0 pb-1 flex items-center justify-between bg-muted/30 border-b border-border/60">
-                <span className="text-[10px] font-mono text-muted-foreground px-2">
-                  {activeCodeLang === "python" && "main.py"}
-                  {activeCodeLang === "javascript" && "solution.js"}
-                  {activeCodeLang === "cpp" && "solution.cpp"}
-                </span>
-                <button type="button"
-                  onClick={() => {
-                    const d = getDefaultStarterCode();
-                    if (activeCodeLang === "python") setPythonCode(d.python);
-                    if (activeCodeLang === "javascript") setJavascriptCode(d.javascript);
-                    if (activeCodeLang === "cpp") setCppCode(d.cpp);
-                  }}
-                  className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 hover:underline">
-                  Reset to default
-                </button>
-              </div>
-              <div className="p-3">
-                {activeCodeLang === "python" && (
-                  <Textarea rows={6} value={pythonCode} onChange={(e) => setPythonCode(e.target.value)}
-                    className="text-xs font-mono bg-transparent border-0 focus-visible:ring-0 p-0 resize-y" placeholder="def solve(): ..." />
-                )}
-                {activeCodeLang === "javascript" && (
-                  <Textarea rows={6} value={javascriptCode} onChange={(e) => setJavascriptCode(e.target.value)}
-                    className="text-xs font-mono bg-transparent border-0 focus-visible:ring-0 p-0 resize-y" placeholder="function solve() { ... }" />
-                )}
-                {activeCodeLang === "cpp" && (
-                  <Textarea rows={6} value={cppCode} onChange={(e) => setCppCode(e.target.value)}
-                    className="text-xs font-mono bg-transparent border-0 focus-visible:ring-0 p-0 resize-y" placeholder="int main() { ... }" />
-                )}
-              </div>
-            </div>
-
-            {/* Test Cases */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Sample */}
-              <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                    <Eye size={12} className="text-muted-foreground" /> Sample Test Case
-                  </Label>
-                  <span className="text-[10px] text-muted-foreground">Shown to students</span>
-                </div>
-                <div className="space-y-1.5">
-                  <div>
-                    <p className="text-[10px] font-mono text-muted-foreground mb-0.5">Input (stdin)</p>
-                    <Textarea rows={2} value={sampleInput} onChange={(e) => setSampleInput(e.target.value)}
-                      placeholder={"4 9\n2 7 11 15"}
-                      className="text-xs font-mono rounded-lg bg-background border-border" />
+                    <div className="p-3">
+                      {activeCodeLang === "python" && (
+                        <Textarea
+                          rows={8}
+                          value={pythonCode}
+                          onChange={(e) => setPythonCode(e.target.value)}
+                          className="text-xs font-mono bg-transparent border-0 focus-visible:ring-0 p-0 resize-y leading-relaxed"
+                          placeholder="def solve(): ..."
+                        />
+                      )}
+                      {activeCodeLang === "javascript" && (
+                        <Textarea
+                          rows={8}
+                          value={javascriptCode}
+                          onChange={(e) => setJavascriptCode(e.target.value)}
+                          className="text-xs font-mono bg-transparent border-0 focus-visible:ring-0 p-0 resize-y leading-relaxed"
+                          placeholder="function solve() { ... }"
+                        />
+                      )}
+                      {activeCodeLang === "cpp" && (
+                        <Textarea
+                          rows={8}
+                          value={cppCode}
+                          onChange={(e) => setCppCode(e.target.value)}
+                          className="text-xs font-mono bg-transparent border-0 focus-visible:ring-0 p-0 resize-y leading-relaxed"
+                          placeholder="int main() { ... }"
+                        />
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-mono text-muted-foreground mb-0.5">Expected Output</p>
-                    <Textarea rows={2} value={sampleOutput} onChange={(e) => setSampleOutput(e.target.value)}
-                      placeholder="0 1"
-                      className="text-xs font-mono rounded-lg bg-background border-border" />
+
+                  {/* Test Cases: Sample & Hidden */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Sample Test Case */}
+                    <div className="rounded-xl border border-border bg-background p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <Eye size={12} className="text-emerald-500" /> Sample Test Case
+                        </Label>
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
+                          Public
+                        </Badge>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div>
+                          <p className="text-[10px] font-mono text-muted-foreground mb-0.5">Input (stdin)</p>
+                          <Textarea
+                            rows={2}
+                            value={sampleInput}
+                            onChange={(e) => setSampleInput(e.target.value)}
+                            placeholder={"4 9\n2 7 11 15"}
+                            className="text-xs font-mono rounded-lg bg-muted/20 border-border"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-mono text-muted-foreground mb-0.5">Expected Output</p>
+                          <Textarea
+                            rows={2}
+                            value={sampleOutput}
+                            onChange={(e) => setSampleOutput(e.target.value)}
+                            placeholder="0 1"
+                            className="text-xs font-mono rounded-lg bg-muted/20 border-border"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground mb-0.5">Explanation (optional)</p>
+                          <Input
+                            value={sampleExplanation}
+                            onChange={(e) => setSampleExplanation(e.target.value)}
+                            placeholder="nums[0]+nums[1]==9, return 0 1"
+                            className="h-7 text-xs rounded-lg bg-muted/20 border-border"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hidden Test Case */}
+                    <div className="rounded-xl border border-border bg-background p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <Lock size={12} className="text-amber-500" /> Hidden Test Case
+                        </Label>
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/10">
+                          Judge Only
+                        </Badge>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div>
+                          <p className="text-[10px] font-mono text-muted-foreground mb-0.5">Input (stdin)</p>
+                          <Textarea
+                            rows={2}
+                            value={hiddenInput}
+                            onChange={(e) => setHiddenInput(e.target.value)}
+                            placeholder={"3 6\n3 2 4"}
+                            className="text-xs font-mono rounded-lg bg-muted/20 border-border"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-mono text-muted-foreground mb-0.5">Expected Output</p>
+                          <Textarea
+                            rows={2}
+                            value={hiddenOutput}
+                            onChange={(e) => setHiddenOutput(e.target.value)}
+                            placeholder="1 2"
+                            className="text-xs font-mono rounded-lg bg-muted/20 border-border"
+                          />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground pt-1 italic">
+                          Protected judge case. Students receive Pass/Fail feedback without seeing evaluation data.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-0.5">Explanation (optional)</p>
-                    <Input value={sampleExplanation} onChange={(e) => setSampleExplanation(e.target.value)}
-                      placeholder="nums[0]+nums[1]==9, return 0 1"
-                      className="h-7 text-xs rounded-lg bg-background border-border" />
-                  </div>
+
+                  {/* SuperAdmin author override */}
+                  {isSuperAdmin && (
+                    <div className="flex items-center gap-2.5 rounded-xl border border-border p-3 bg-background">
+                      <ShieldCheck size={14} className="text-primary shrink-0" />
+                      <span className="text-[11px] text-muted-foreground font-medium shrink-0">Faculty Override:</span>
+                      <Input
+                        value={publishedBy}
+                        onChange={(e) => setPublishedBy(e.target.value)}
+                        placeholder="Faculty member name"
+                        className="h-7 text-xs rounded-lg border-border bg-muted/20 flex-1"
+                      />
+                    </div>
+                  )}
                 </div>
+
               </div>
 
-              {/* Hidden */}
-              <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                    <Lock size={12} className="text-muted-foreground" /> Hidden Test Case
-                  </Label>
-                  <span className="text-[10px] text-muted-foreground">Judge only — private</span>
-                </div>
-                <div className="space-y-1.5">
-                  <div>
-                    <p className="text-[10px] font-mono text-muted-foreground mb-0.5">Input (stdin)</p>
-                    <Textarea rows={2} value={hiddenInput} onChange={(e) => setHiddenInput(e.target.value)}
-                      placeholder={"3 6\n3 2 4"}
-                      className="text-xs font-mono rounded-lg bg-background border-border" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-mono text-muted-foreground mb-0.5">Expected Output</p>
-                    <Textarea rows={2} value={hiddenOutput} onChange={(e) => setHiddenOutput(e.target.value)}
-                      placeholder="1 2"
-                      className="text-xs font-mono rounded-lg bg-background border-border" />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground pt-1">
-                    Students see pass/fail only — the input and expected output stay hidden.
-                  </p>
-                </div>
-              </div>
             </div>
-
-            {/* SuperAdmin author override */}
-            {isSuperAdmin && (
-              <div className="flex items-center gap-3 rounded-xl border border-border p-3 bg-muted/20">
-                <ShieldCheck size={13} className="text-muted-foreground shrink-0" />
-                <span className="text-[11px] text-muted-foreground font-medium shrink-0">Author override:</span>
-                <Input value={publishedBy} onChange={(e) => setPublishedBy(e.target.value)}
-                  placeholder="Faculty member name"
-                  className="h-7 text-xs rounded-lg border-border bg-background flex-1" />
-              </div>
-            )}
           </div>
 
           {/* Footer */}
-          <div className="px-5 py-3 border-t border-border shrink-0 flex items-center justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setDialogOpen(false)} className="text-xs rounded-xl">
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleSaveProblem}
-              className="text-xs rounded-xl gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium">
-              <Check size={13} />
-              {editingId ? "Update Problem" : "Create Problem"}
-            </Button>
+          <div className="px-5 py-3 border-t border-border shrink-0 flex items-center justify-between bg-muted/20">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Cohort: <strong>{targetYear === "All" ? "All Years" : targetYear}</strong></span>
+              <span>·</span>
+              <span>Level: <strong>{difficulty}</strong></span>
+              <span>·</span>
+              <span>Points: <strong>{points} pts</strong></span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDialogOpen(false)}
+                className="text-xs rounded-xl"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveProblem}
+                className="text-xs rounded-xl gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 shadow-sm"
+              >
+                <Check size={14} />
+                {editingId ? "Update Challenge" : "Publish Challenge"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
