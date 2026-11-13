@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -1091,52 +1092,89 @@ export const AdminProblemsTab: React.FC<AdminProblemsTabProps> = ({
       </div>
 
       {/* ── Create / Edit Problem Dialog ── */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setIsFullscreen(false);
+        }}
+      >
         <DialogContent
-          className={`${
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && isFullscreen) {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsFullscreen(false);
+            }
+          }}
+          style={
             isFullscreen
-              ? "w-screen max-w-none h-screen max-h-none fixed inset-0 z-50 rounded-none border-0"
-              : "w-[98vw] max-w-[1500px] h-[95vh] max-h-[95vh] rounded-2xl border border-border shadow-2xl"
-          } flex flex-col p-0 overflow-hidden bg-card transition-all duration-200`}
+              ? {
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  transform: "none",
+                  width: "100vw",
+                  height: "100vh",
+                  maxWidth: "100vw",
+                  maxHeight: "100vh",
+                  margin: 0,
+                  borderRadius: 0,
+                  zIndex: 50,
+                }
+              : undefined
+          }
+          className={cn(
+            "flex flex-col p-0 overflow-hidden bg-card transition-all duration-200",
+            isFullscreen
+              ? "!fixed !top-0 !left-0 !right-0 !bottom-0 !translate-x-0 !translate-y-0 !w-screen !h-screen !max-w-none !max-h-none !rounded-none !border-0 !m-0 !z-50"
+              : "w-[96vw] max-w-[1450px] h-[94vh] max-h-[94vh] rounded-2xl border border-border shadow-2xl"
+          )}
         >
           <div className="h-0.5 w-full bg-gradient-to-r from-primary via-primary/60 to-primary/20 shrink-0" />
 
-          {/* Header */}
-          <div className="px-5 py-3 border-b border-border shrink-0 flex items-center justify-between gap-3 bg-muted/20">
-            <div className="flex items-center gap-2.5">
+          {/* Header (pr-14 provides dedicated clear space for the Radix absolute close X button) */}
+          <div className="px-4 sm:px-6 py-3.5 pr-14 border-b border-border shrink-0 flex items-center justify-between gap-3 bg-muted/20">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
                 <Code2 size={16} />
               </div>
-              <div>
-                <DialogTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <div className="min-w-0">
+                <DialogTitle className="text-sm sm:text-base font-semibold text-foreground flex items-center gap-2 truncate">
                   <span>{editingId ? "Edit Problem" : "Create New Problem"}</span>
-                  <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary font-normal">
+                  <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary font-normal hidden xs:inline-flex">
                     {targetYear === "All" ? "All Cohorts" : targetYear}
                   </Badge>
                 </DialogTitle>
-                <DialogDescription className="text-[10px] text-muted-foreground mt-0">
+                <DialogDescription className="text-[10px] text-muted-foreground mt-0 truncate">
                   Author: <span className="font-medium text-foreground">{isSuperAdmin ? publishedBy || currentAdminName : currentAdminName}</span>
                 </DialogDescription>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 shrink-0">
               {/* Fullscreen Toggle */}
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg hidden sm:flex items-center gap-1.5 border border-border/60 hover:bg-muted/40"
-                title={isFullscreen ? "Exit Fullscreen" : "Open Fullscreen"}
+                className={`h-8 px-2.5 text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-xs ${
+                  isFullscreen
+                    ? "bg-primary text-primary-foreground border-primary font-semibold hover:bg-primary/90"
+                    : "bg-background text-foreground border-border hover:bg-muted/40 font-medium"
+                }`}
+                title={isFullscreen ? "Exit Fullscreen (or press Esc)" : "Open Full Screen"}
               >
                 {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                <span className="text-[11px] font-medium">{isFullscreen ? "Exit Fullscreen" : "Full Screen"}</span>
+                <span className="text-[11px]">{isFullscreen ? "Exit Fullscreen" : "Full Screen"}</span>
               </Button>
 
               {/* Publish Toggle */}
-              <div className="flex items-center gap-2 text-xs bg-background/80 border border-border/80 px-2.5 py-1 rounded-xl">
-                <span className="text-muted-foreground text-[11px]">Visibility</span>
+              <div className="flex items-center gap-2 text-xs bg-background/80 border border-border px-2.5 py-1 rounded-xl">
+                <span className="text-muted-foreground text-[11px] hidden sm:inline">Visibility</span>
                 <Switch id="modal-live-switch" checked={isPublished} onCheckedChange={setIsPublished} />
                 <span className={`text-[11px] ${isPublished ? "font-semibold text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
                   {isPublished ? "Live" : "Draft"}
