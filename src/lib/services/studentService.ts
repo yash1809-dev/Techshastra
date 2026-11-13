@@ -43,6 +43,7 @@ export const getAllStudents = async (includeInactive = false): Promise<FullStude
     ...item,
     name: item.profiles?.full_name || item.name || item.username,
     email: item.profiles?.email || item.email || '',
+    avatar: item.profiles?.avatar_url || item.avatar_url || item.avatar || null,
     githubUsername: item.github_username || item.githubUsername,
     education: item.education || [],
     experience: item.experience || [],

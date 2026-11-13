@@ -231,7 +231,7 @@ const StudentsTab = () => {
               <Card key={s.id} className={`border-primary/10 transition-opacity ${s.is_active ? "" : "opacity-60"}`}>
                 <CardContent className="py-4 flex items-center gap-4 flex-wrap">
                   <img
-                    src={`https://avatars.githubusercontent.com/${handle}?s=40`}
+                    src={s.avatar || s.avatar_url || (s.profiles?.avatar_url) || `https://avatars.githubusercontent.com/${handle}?s=40`}
                     alt={displayName}
                     className="w-10 h-10 rounded-xl ring-2 ring-primary/20 flex-shrink-0 object-cover"
                   />

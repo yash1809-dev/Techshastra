@@ -22,6 +22,7 @@ const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 const MemberCard = ({ student }: { student: any }) => {
   const ghUser = student.githubUsername || student.github_username || student.username;
   const displayName = student.name || student.username || "Member";
+  const avatarSrc = student.avatar || student.avatar_url || student.profiles?.avatar_url || (ghUser ? `https://avatars.githubusercontent.com/${ghUser}?s=80` : "");
   const interestsList = student.interests || [];
   return (
     <motion.div variants={fadeUp}>
@@ -31,18 +32,19 @@ const MemberCard = ({ student }: { student: any }) => {
           {/* Avatar + name */}
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-2xl overflow-hidden ring-2 ring-primary/20 flex-shrink-0 bg-primary/10 flex items-center justify-center">
-              {/* Avatar loaded lazily from GitHub */}
-              <img
-                src={`https://avatars.githubusercontent.com/${ghUser}?s=80`}
-                alt={displayName}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
-              />
-              <span className="text-xl font-heading text-primary hidden">
-                {displayName[0]?.toUpperCase()}
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt={displayName}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              ) : null}
+              <span className="text-xl font-heading text-primary">
+                {displayName[0]?.toUpperCase() || "M"}
               </span>
             </div>
             <div className="min-w-0">
@@ -122,6 +124,17 @@ const Members = () => {
       }
     };
     loadStudents();
+
+    const handler = (e: Event) => {
+      const { avatarUrl, studentId } = (e as CustomEvent<{ avatarUrl: string; studentId: string }>).detail || {};
+      if (avatarUrl) {
+        setAllStudents((prev) =>
+          prev.map((s) => (s.id === studentId || s.studentId === studentId ? { ...s, avatar: avatarUrl } : s))
+        );
+      }
+    };
+    window.addEventListener("ts_avatar_updated", handler);
+    return () => window.removeEventListener("ts_avatar_updated", handler);
   }, []);
 
   // Collect all unique interests for filter chips
