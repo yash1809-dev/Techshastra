@@ -5,11 +5,32 @@ import { Link } from "react-router-dom";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
+import { getStudentByGithub } from "@/lib/studentStore";
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { session: studentSession, logout } = useStudentAuth();
+  const [navAvatar, setNavAvatar] = useState<string>(() => {
+    if (studentSession?.githubUsername) {
+      const local = getStudentByGithub(studentSession.githubUsername);
+      return local?.avatar || `https://github.com/${studentSession.githubUsername}.png?size=64`;
+    }
+    return "";
+  });
+
+  useEffect(() => {
+    if (studentSession?.githubUsername) {
+      const local = getStudentByGithub(studentSession.githubUsername);
+      if (local?.avatar) setNavAvatar(local.avatar);
+    }
+    const handler = (e: Event) => {
+      const { avatarUrl: newAvatar } = (e as CustomEvent<{ avatarUrl: string }>).detail || {};
+      if (newAvatar) setNavAvatar(newAvatar);
+    };
+    window.addEventListener("ts_avatar_updated", handler);
+    return () => window.removeEventListener("ts_avatar_updated", handler);
+  }, [studentSession?.githubUsername]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -106,7 +127,7 @@ const Navbar = () => {
                     className="flex items-center gap-2 text-sm font-light tracking-wider text-foreground/70 hover:text-foreground transition-colors duration-300 group"
                     title={`View profile (@${studentSession.githubUsername})`}>
                     <img
-                      src={`https://github.com/${studentSession.githubUsername}.png?size=64`}
+                      src={navAvatar || `https://github.com/${studentSession.githubUsername}.png?size=64`}
                       alt={studentSession.name}
                       className="w-7 h-7 rounded-full ring-2 ring-primary/30 object-cover group-hover:ring-primary transition-all"
                       onError={(e) => {
@@ -229,8 +250,8 @@ const Navbar = () => {
                         <Link to={`/members/${studentSession.githubUsername}`} onClick={() => setIsMobileMenuOpen(false)}>
                           <Button size="lg" variant="outline" className="w-full rounded-full font-light tracking-widest gap-2">
                             <img
-                              src={`https://github.com/${studentSession.githubUsername}.png?size=48`}
-                              className="w-5 h-5 rounded-full"
+                              src={navAvatar || `https://github.com/${studentSession.githubUsername}.png?size=48`}
+                              className="w-5 h-5 rounded-full object-cover"
                               alt=""
                               onError={(e) => { e.currentTarget.style.display = 'none'; }}
                             />

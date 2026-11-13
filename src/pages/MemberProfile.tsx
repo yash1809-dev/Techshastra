@@ -296,6 +296,18 @@ const MemberProfile = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  // Listen for avatar updates dispatched from MemberEdit after save
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { avatarUrl } = (e as CustomEvent<{ avatarUrl: string; studentId: string }>).detail;
+      if (avatarUrl) {
+        setStudent((prev) => prev ? { ...prev, avatar: avatarUrl } : prev);
+      }
+    };
+    window.addEventListener("ts_avatar_updated", handler);
+    return () => window.removeEventListener("ts_avatar_updated", handler);
+  }, []);
+
   // ── Error states ─────────────────────────────────────────────────────────
 
   if (status === "not_found") return (

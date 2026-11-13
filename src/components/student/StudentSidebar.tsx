@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
+import { getStudentByGithub } from "@/lib/studentStore";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   Code2,
@@ -29,6 +30,27 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
   const { session, logout } = useStudentAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const [avatarUrl, setAvatarUrl] = useState<string>(() => {
+    if (session?.githubUsername) {
+      const local = getStudentByGithub(session.githubUsername);
+      return local?.avatar || `https://github.com/${session.githubUsername}.png?size=64`;
+    }
+    return "";
+  });
+
+  useEffect(() => {
+    if (session?.githubUsername) {
+      const local = getStudentByGithub(session.githubUsername);
+      if (local?.avatar) setAvatarUrl(local.avatar);
+    }
+    const handler = (e: Event) => {
+      const { avatarUrl: newAvatar } = (e as CustomEvent<{ avatarUrl: string }>).detail || {};
+      if (newAvatar) setAvatarUrl(newAvatar);
+    };
+    window.addEventListener("ts_avatar_updated", handler);
+    return () => window.removeEventListener("ts_avatar_updated", handler);
+  }, [session?.githubUsername]);
 
   const profileHref = session?.githubUsername
     ? `/members/${session.githubUsername}`
@@ -88,10 +110,10 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
           title={collapsed && !isMobile ? `${session?.name} (@${session?.githubUsername})` : undefined}
         >
           {/* Avatar */}
-          {session?.githubUsername ? (
+          {avatarUrl || session?.githubUsername ? (
             <img
-              src={`https://github.com/${session.githubUsername}.png?size=64`}
-              alt={session.name}
+              src={avatarUrl || `https://github.com/${session?.githubUsername}.png?size=64`}
+              alt={session?.name || "Student"}
               className="w-9 h-9 rounded-full ring-2 ring-primary/30 object-cover flex-shrink-0 group-hover:ring-primary/60 transition-all"
               onError={(e) => { e.currentTarget.style.display = "none"; }}
             />
@@ -211,10 +233,10 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
       {/* Mobile Top Header + Drawer Trigger */}
       <div className="md:hidden flex items-center justify-between px-4 py-2.5 bg-background/90 backdrop-blur-md sticky top-0 z-40" style={{ borderBottom: "1px solid hsl(var(--glass-border))" }}>
         <Link to={profileHref} className="flex items-center gap-2.5 min-w-0">
-          {session?.githubUsername ? (
+          {avatarUrl || session?.githubUsername ? (
             <img
-              src={`https://github.com/${session.githubUsername}.png?size=64`}
-              alt={session.name}
+              src={avatarUrl || `https://github.com/${session?.githubUsername}.png?size=64`}
+              alt={session?.name || "Student"}
               className="w-7 h-7 rounded-full ring-2 ring-primary/30 object-cover flex-shrink-0"
               onError={(e) => { e.currentTarget.style.display = "none"; }}
             />

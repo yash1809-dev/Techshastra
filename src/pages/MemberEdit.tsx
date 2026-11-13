@@ -470,12 +470,22 @@ const MemberEdit = () => {
         skills,
       });
 
-      // Update avatar in profiles table if session exists
-      if (isSupabaseConfigured() && session?.studentId && avatar) {
-        await supabase
-          .from("profiles")
-          .update({ avatar_url: avatar })
-          .eq("id", session.studentId);
+      // Update avatar in profiles and student_profiles tables
+      if (isSupabaseConfigured() && avatar) {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          const targetUserId = authData?.user?.id || (student as any).user_id || session?.studentId;
+          if (targetUserId) {
+            await supabase
+              .from("profiles")
+              .update({ avatar_url: avatar })
+              .eq("id", targetUserId);
+          }
+          await supabase
+            .from("student_profiles")
+            .update({ avatar_url: avatar } as any)
+            .eq("id", student.id);
+        } catch (_avatarErr) {}
       }
     } catch (_err) {}
     updateStudent(student.id, {
@@ -488,6 +498,17 @@ const MemberEdit = () => {
       experience,
       certifications,
     });
+
+    // Dispatch a custom event so MemberProfile and other consumers
+    // reactively update the avatar without a full page reload.
+    if (avatar) {
+      window.dispatchEvent(
+        new CustomEvent("ts_avatar_updated", {
+          detail: { avatarUrl: avatar, studentId: student.id },
+        })
+      );
+    }
+
     setSaving(false);
     setSaved(true);
     toast({ title: "Profile saved ✓" });

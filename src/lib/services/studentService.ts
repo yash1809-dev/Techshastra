@@ -72,6 +72,7 @@ export const getStudentByUsername = async (username: string): Promise<FullStuden
         ...data,
         name: (data as any).profiles?.full_name || (data as any).name || data.username,
         email: (data as any).profiles?.email || (data as any).email || '',
+        avatar: (data as any).profiles?.avatar_url || (data as any).avatar_url || (data as any).avatar || null,
         githubUsername: (data as any).github_username || (data as any).githubUsername,
         education: (data as any).education || [],
         experience: (data as any).experience || [],
@@ -92,6 +93,7 @@ export const getStudentByUsername = async (username: string): Promise<FullStuden
       return {
         ...fallback,
         name: fallback.username,
+        avatar: (fallback as any).avatar_url || (fallback as any).avatar || null,
         githubUsername: (fallback as any).github_username || (fallback as any).githubUsername,
         education: [],
         experience: [],
@@ -124,6 +126,7 @@ export const getStudentByUserId = async (userId: string): Promise<FullStudentPro
         ...data,
         name: (data as any).profiles?.full_name || (data as any).name || data.username,
         email: (data as any).profiles?.email || (data as any).email || '',
+        avatar: (data as any).profiles?.avatar_url || (data as any).avatar_url || (data as any).avatar || null,
         githubUsername: (data as any).github_username || (data as any).githubUsername,
         education: (data as any).education || [],
         experience: (data as any).experience || [],
@@ -144,6 +147,7 @@ export const getStudentByUserId = async (userId: string): Promise<FullStudentPro
       return {
         ...fallback,
         name: fallback.username,
+        avatar: (fallback as any).avatar_url || (fallback as any).avatar || null,
         githubUsername: (fallback as any).github_username || (fallback as any).githubUsername,
         education: [],
         experience: [],
