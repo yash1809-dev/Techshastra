@@ -18,7 +18,7 @@ import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LayoutDashboard, FileText, Calendar, Image, Trophy, HelpCircle, MessageSquare, Users, Plus, Trash2, Github, Globe, Terminal, Loader2, Award, Newspaper, Eye, EyeOff, Book, ShieldCheck, LogOut, Ban, UserCheck, UserX, ToggleLeft, ToggleRight, UserPlus, Phone, CalendarDays, Copy, Key, Mail, RotateCcw, ClipboardList, X, Check, ShieldAlert, CheckCircle2, Instagram, Linkedin, Twitter, Facebook, Link, Hash, Upload, Download, Code2 } from "lucide-react";
+import { LayoutDashboard, FileText, Calendar, Image, Trophy, HelpCircle, MessageSquare, Users, Plus, Trash2, Github, Globe, Terminal, Loader2, Award, Newspaper, Eye, EyeOff, Book, ShieldCheck, LogOut, Ban, UserCheck, UserX, ToggleLeft, ToggleRight, UserPlus, Phone, CalendarDays, Copy, Key, Mail, RotateCcw, ClipboardList, X, Check, ShieldAlert, CheckCircle2, Instagram, Linkedin, Twitter, Facebook, Link, Hash, Upload, Download, Code2, BookOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,6 +56,7 @@ import type { Publication } from "@/lib/services/publicationService";
 import * as studentService from "@/lib/services/studentService";
 import { getAllStudents, updateStudent as updateStudentStore, type StudentProfile } from "@/lib/studentStore";
 import AdminProblemsTab from "@/components/admin/AdminProblemsTab";
+import { AcademicQuestionBankTab } from "@/components/admin/academic/AcademicQuestionBankTab";
 
 // Legacy type aliases for shapes not yet fully migrated
 type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
@@ -1391,9 +1392,12 @@ const Admin = ({ userRole }: AdminProps) => {
             {!isFaculty && (<TabsTrigger value="messages" className="shrink-0 text-xs py-2 px-3 rounded-xl"><MessageSquare className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Messages</TabsTrigger>)}
             {!isFaculty && (<TabsTrigger value="certificates" className="shrink-0 text-xs py-2 px-3 rounded-xl"><Award className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Certs</TabsTrigger>)}
             {!isFaculty && (<TabsTrigger value="students" className="shrink-0 text-xs py-2 px-3 rounded-xl"><Users className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Students</TabsTrigger>)}
-            {/* Faculty & SuperAdmin see Problems tab */}
+            {/* Faculty & SuperAdmin see Problems & Academic Question Bank tabs */}
             {(isFaculty || isSuperAdmin) && (
-              <TabsTrigger value="problems" className="shrink-0 text-xs py-2 px-3 rounded-xl"><Code2 className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Problems & Tasks</TabsTrigger>
+              <>
+                <TabsTrigger value="problems" className="shrink-0 text-xs py-2 px-3 rounded-xl"><Code2 className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Coding Challenges</TabsTrigger>
+                <TabsTrigger value="academic-questions" className="shrink-0 text-xs py-2 px-3 rounded-xl"><BookOpen className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Academic Question Bank</TabsTrigger>
+              </>
             )}
             {isSuperAdmin && (
               <TabsTrigger value="super-admin" className="shrink-0 text-xs py-2 px-3 rounded-xl bg-primary/10 text-primary relative">
@@ -2542,6 +2546,11 @@ const Admin = ({ userRole }: AdminProps) => {
           {/* ── Problems & Tasks ── */}
           <TabsContent value="problems">
             <AdminProblemsTab currentAdminName={currentUserName} isSuperAdmin={false} />
+          </TabsContent>
+
+          {/* ── Academic Question Bank (Theory & Numericals) ── */}
+          <TabsContent value="academic-questions">
+            <AcademicQuestionBankTab />
           </TabsContent>
 
           {/* ── Socials ── */}

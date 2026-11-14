@@ -52,6 +52,7 @@ const ProblemSolve    = lazy(() => import("./pages/student/ProblemSolve"));
 const CodePlayground  = lazy(() => import("./pages/student/CodePlayground"));
 const LeaderboardPage = lazy(() => import("./pages/student/LeaderboardPage"));
 const TypingTestPage  = lazy(() => import("./pages/student/TypingTestPage"));
+const QuestionBankPage = lazy(() => import("./pages/student/QuestionBankPage"));
 
 // ─── Global page-load fallback ───────────────────────────────────────
 const PageLoader = () => (
@@ -148,6 +149,13 @@ const App = () => (
                 <ProtectedStudentRoute>
                   <StudentLayout title="Typing Speed Arena" subtitle="Improve developer keyboard proficiency and accuracy">
                     <TypingTestPage />
+                  </StudentLayout>
+                </ProtectedStudentRoute>
+              } />
+              <Route path="/student/question-bank" element={
+                <ProtectedStudentRoute>
+                  <StudentLayout title="Question Bank" subtitle="Browse academic questions & live papers">
+                    <QuestionBankPage />
                   </StudentLayout>
                 </ProtectedStudentRoute>
               } />

@@ -57,7 +57,6 @@ import {
   EyeOff,
   Sparkles,
   ExternalLink,
-  BookOpen,
   CheckCircle2,
   Clock,
   Search,
@@ -754,7 +753,7 @@ export const AdminProblemsTab: React.FC<AdminProblemsTabProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* ── Top Header Banner & Stats ── */}
+          {/* ── Top Header Banner & Stats ── */}
       <Card className="glass border-white/30 dark:border-white/10 shadow-glass overflow-hidden relative">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-purple-500 to-primary/40" />
         <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">

@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Menu,
   Github,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +91,13 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
       icon: Keyboard,
       activeCheck: (path: string) => path.startsWith("/student/typing"),
       badge: "WPM",
+    },
+    {
+      label: "Question Bank",
+      href: "/student/question-bank",
+      icon: BookOpen,
+      activeCheck: (path: string) => path.startsWith("/student/question-bank"),
+      badge: "Theory",
     },
   ];
 
@@ -327,6 +335,18 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
         >
           <Keyboard size={18} />
           <span>Typing</span>
+        </Link>
+
+        <Link
+          to="/student/question-bank"
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-medium transition-colors ${
+            location.pathname.startsWith("/student/question-bank")
+              ? "text-primary font-semibold"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <BookOpen size={18} />
+          <span>Q-Bank</span>
         </Link>
       </nav>
     </>
