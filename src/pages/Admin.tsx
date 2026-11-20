@@ -18,7 +18,7 @@ import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LayoutDashboard, FileText, Calendar, Image, Trophy, HelpCircle, MessageSquare, Users, Plus, Trash2, Github, Globe, Terminal, Loader2, Award, Newspaper, Eye, EyeOff, Book, ShieldCheck, LogOut, Ban, UserCheck, UserX, ToggleLeft, ToggleRight, UserPlus, Phone, CalendarDays, Copy, Key, Mail, RotateCcw, ClipboardList, X, Check, ShieldAlert, CheckCircle2, Instagram, Linkedin, Twitter, Facebook, Link, Hash, Upload, Download, Code2, BookOpen } from "lucide-react";
+import { LayoutDashboard, FileText, Calendar, Image, Trophy, HelpCircle, MessageSquare, Users, Plus, Trash2, Github, Globe, Terminal, Loader2, Award, Newspaper, Eye, EyeOff, Book, ShieldCheck, LogOut, Ban, UserCheck, UserX, ToggleLeft, ToggleRight, UserPlus, Phone, CalendarDays, Copy, Key, Mail, RotateCcw, ClipboardList, X, Check, ShieldAlert, CheckCircle2, Instagram, Linkedin, Twitter, Facebook, Link, Hash, Upload, Download, Code2, BookOpen, Crown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,6 +57,8 @@ import * as studentService from "@/lib/services/studentService";
 import { getAllStudents, updateStudent as updateStudentStore, type StudentProfile } from "@/lib/studentStore";
 import AdminProblemsTab from "@/components/admin/AdminProblemsTab";
 import { AcademicQuestionBankTab } from "@/components/admin/academic/AcademicQuestionBankTab";
+import AdminRolePromotionsTab from "@/components/admin/AdminRolePromotionsTab";
+import { canPromoteRoles } from "@/lib/services/hierarchyService";
 
 // Legacy type aliases for shapes not yet fully migrated
 type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
@@ -1399,6 +1401,11 @@ const Admin = ({ userRole }: AdminProps) => {
                 <TabsTrigger value="academic-questions" className="shrink-0 text-xs py-2 px-3 rounded-xl"><BookOpen className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Academic Question Bank</TabsTrigger>
               </>
             )}
+            {(isSuperAdmin || canPromoteRoles(currentAdminRole, currentAdminName || currentUserName)) && (
+              <TabsTrigger value="promotions" className="shrink-0 text-xs py-2 px-3 rounded-xl bg-amber-500/10 text-amber-500 font-medium relative">
+                <Crown className="w-3.5 h-3.5 mr-1.5" />Leadership & Promotions
+              </TabsTrigger>
+            )}
             {isSuperAdmin && (
               <TabsTrigger value="super-admin" className="shrink-0 text-xs py-2 px-3 rounded-xl bg-primary/10 text-primary relative">
                 <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />Super Admin
@@ -2551,6 +2558,14 @@ const Admin = ({ userRole }: AdminProps) => {
           {/* ── Academic Question Bank (Theory & Numericals) ── */}
           <TabsContent value="academic-questions">
             <AcademicQuestionBankTab />
+          </TabsContent>
+
+          {/* ── Leadership & Role Promotions ── */}
+          <TabsContent value="promotions">
+            <AdminRolePromotionsTab
+              currentAdminName={currentUserName || currentAdminName}
+              isSuperAdmin={isSuperAdmin}
+            />
           </TabsContent>
 
           {/* ── Socials ── */}

@@ -65,8 +65,10 @@ import {
   Settings,
   Sparkles,
   Code2,
+  Crown,
 } from "lucide-react";
 import AdminProblemsTab from "@/components/admin/AdminProblemsTab";
+import AdminRolePromotionsTab from "@/components/admin/AdminRolePromotionsTab";
 
 type SuperAdminViewState = "initializing" | "setup" | "login" | "dashboard";
 
@@ -786,6 +788,10 @@ export default function SuperAdmin() {
               <Code2 className="w-3.5 h-3.5" />
               <span>Problems & Tasks</span>
             </TabsTrigger>
+            <TabsTrigger value="promotions" className="gap-1.5 sm:gap-2 text-xs shrink-0 bg-amber-500/10 text-amber-500 font-medium">
+              <Crown className="w-3.5 h-3.5" />
+              <span>Promotions & Applications</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* ── TAB 1: ADMIN ACCESS REQUESTS ── */}
@@ -1024,6 +1030,11 @@ export default function SuperAdmin() {
           {/* ── TAB 4: PROBLEMS & TASKS MANAGEMENT ── */}
           <TabsContent value="problems" className="space-y-4">
             <AdminProblemsTab currentAdminName={superAdminName || "Super Admin"} isSuperAdmin={true} />
+          </TabsContent>
+
+          {/* ── TAB 5: LEADERSHIP ROLE PROMOTIONS & SUCCESSION ── */}
+          <TabsContent value="promotions" className="space-y-4">
+            <AdminRolePromotionsTab currentAdminName={superAdminName || "Super Admin"} isSuperAdmin={true} />
           </TabsContent>
         </Tabs>
       </main>
