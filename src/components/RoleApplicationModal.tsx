@@ -83,21 +83,15 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
 
   // Year breakdown:
   // 1st Year: strictly Volunteer only (higher tiers locked)
-  // 2nd Year: can apply up to Vice President & Functional Heads / Co-Heads
-  // 3rd & 4th Year: eligible for President, all Tier 1 roles & Functional Heads
+  // 2nd, 3rd & 4th Year: eligible for President, all Tier 1 roles & Functional Heads
   const isFirstYear = studentYear === "1st Year";
-  const isSecondYear = studentYear === "2nd Year";
-  const isSenior = studentYear === "3rd Year" || studentYear === "4th Year";
 
   // Check whether student is academically eligible for a specific role
   const isYearEligible = (role: HierarchyRole): boolean => {
     if (role === "volunteer") return true; // Open to all years
     if (isFirstYear) return false;
-    if (role === "president" || role === "general_secretary" || role === "treasurer") {
-      return isSenior; // Strictly 3rd & 4th Year
-    }
-    // Vice President, functional_head, functional_co_head: 2nd, 3rd, 4th Year
-    return isSecondYear || isSenior;
+    // 2nd, 3rd, and 4th Year can apply for all roles
+    return true;
   };
 
   // Check whether role is currently occupied by a promoted member
@@ -125,16 +119,13 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
   // Initial role selection prioritizing an open role
   const initialRole: HierarchyRole = useMemo(() => {
     if (isFirstYear) return "volunteer";
-    if (isSenior) {
-      if (!getRoleOccupancy("president").occupied) return "president";
-      if (!getRoleOccupancy("vice_president").occupied) return "vice_president";
-      if (!getRoleOccupancy("general_secretary").occupied) return "general_secretary";
-      if (!getRoleOccupancy("treasurer").occupied) return "treasurer";
-    }
-    if (!getRoleOccupancy("vice_president").occupied && !isFirstYear) return "vice_president";
-    if (!getRoleOccupancy("functional_head").occupied && !isFirstYear) return "functional_head";
+    if (!getRoleOccupancy("president").occupied) return "president";
+    if (!getRoleOccupancy("vice_president").occupied) return "vice_president";
+    if (!getRoleOccupancy("general_secretary").occupied) return "general_secretary";
+    if (!getRoleOccupancy("treasurer").occupied) return "treasurer";
+    if (!getRoleOccupancy("functional_head").occupied) return "functional_head";
     return "volunteer";
-  }, [isFirstYear, isSenior, promotedMembers]);
+  }, [isFirstYear, promotedMembers]);
 
   // Form State
   const [selectedRole, setSelectedRole] = useState<HierarchyRole>(initialRole);
@@ -256,11 +247,7 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
     if (isOccupied) {
       reasonText = occupancy.holderName ? `Filled by ${occupancy.holderName}` : "Position Filled";
     } else if (!eligible) {
-      if (role === "president" || role === "general_secretary" || role === "treasurer") {
-        reasonText = "Restricted to 3rd & 4th Year";
-      } else {
-        reasonText = "Restricted to 2nd, 3rd & 4th Year";
-      }
+      reasonText = "Restricted to 2nd, 3rd & 4th Year";
     }
 
     return (
@@ -367,14 +354,9 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
                   <strong className="text-primary font-medium">1st Year Entry:</strong> As a 1st Year member, you are invited to join our functional wings as a{" "}
                   <strong>Club Volunteer / Team Member</strong>. Higher leadership tiers unlock from 2nd Year onward.
                 </>
-              ) : isSecondYear ? (
-                <>
-                  <strong className="text-primary font-medium">2nd Year Progression:</strong> You are eligible to apply for{" "}
-                  <strong>Vice President</strong>, <strong>Functional Heads</strong>, <strong>Co-Heads</strong>, or as a <strong>Volunteer</strong> across any wing.
-                </>
               ) : (
                 <>
-                  <strong className="text-primary font-medium">{studentYear} Core Leadership:</strong> You are eligible for{" "}
+                  <strong className="text-primary font-medium">{studentYear} Leadership:</strong> You are eligible for{" "}
                   <strong>President</strong>, <strong>all Executive Board roles (VP, General Secretary, Treasurer)</strong>, as well as <strong>Functional Heads</strong> and <strong>Volunteers</strong>.
                 </>
               )}

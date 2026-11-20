@@ -67,9 +67,9 @@ export const ROLE_DEFINITIONS: Record<HierarchyRole, RoleDefinition> = {
     id: "president",
     title: "President",
     tier: 1,
-    eligibleYears: ["3rd Year", "4th Year"],
+    eligibleYears: ["2nd Year", "3rd Year", "4th Year"],
     requiresWing: false,
-    isOpenForApplication: true, // Opened for 3rd & 4th year applicants
+    isOpenForApplication: true,
     description: "Overall leadership, external representation, and strategic direction of TechShastra.",
   },
   vice_president: {
@@ -85,18 +85,18 @@ export const ROLE_DEFINITIONS: Record<HierarchyRole, RoleDefinition> = {
     id: "general_secretary",
     title: "General Secretary",
     tier: 1,
-    eligibleYears: ["3rd Year", "4th Year"],
+    eligibleYears: ["2nd Year", "3rd Year", "4th Year"],
     requiresWing: false,
-    isOpenForApplication: true, // Opened for 3rd & 4th year applicants
+    isOpenForApplication: true,
     description: "Documentation, governance, administrative coordination, and records.",
   },
   treasurer: {
     id: "treasurer",
     title: "Treasurer",
     tier: 1,
-    eligibleYears: ["3rd Year", "4th Year"],
+    eligibleYears: ["2nd Year", "3rd Year", "4th Year"],
     requiresWing: false,
-    isOpenForApplication: true, // Opened for 3rd & 4th year applicants
+    isOpenForApplication: true,
     description: "Budgeting, financial accounts, allocations, and sponsorship management.",
   },
   functional_head: {
