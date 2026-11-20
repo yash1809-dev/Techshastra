@@ -141,6 +141,14 @@ export function saveStoredProblems(problems: CodingProblem[]): void {
 // ── SUPABASE MAPPER ─────────────────────────────────────────────────────────
 
 function mapRowToProblem(row: any): CodingProblem {
+  const rawTags = Array.isArray(row.tags) ? row.tags : [];
+  // Extract target year if embedded in tags (e.g. "year:2nd Year" or "2nd Year")
+  const yearTag = rawTags.find((t: string) => typeof t === "string" && t.startsWith("year:"))?.replace("year:", "") ||
+    rawTags.find((t: string) => ["1st Year", "2nd Year", "3rd Year", "4th Year"].includes(t));
+  const chosenYear = (row.target_year || row.target_semester || yearTag || "All") as TargetYear;
+  // Filter out internal "year:*" tags from display tags
+  const cleanTags = rawTags.filter((t: string) => typeof t === "string" && !t.startsWith("year:"));
+
   return {
     id: row.id,
     slug: row.slug || row.id,
@@ -153,19 +161,25 @@ function mapRowToProblem(row: any): CodingProblem {
     isPublished: row.is_published ?? true,
     description: row.description || "",
     constraints: Array.isArray(row.constraints) ? row.constraints : [],
-    tags: Array.isArray(row.tags) ? row.tags : [],
+    tags: cleanTags,
     starterCode: row.starter_code && Object.keys(row.starter_code).length > 0
       ? row.starter_code
       : getDefaultStarterCode(),
     sampleTestCases: Array.isArray(row.sample_test_cases) ? row.sample_test_cases : [],
     hiddenTestCases: Array.isArray(row.hidden_test_cases) ? row.hidden_test_cases : [],
-    targetYear: (row.target_year || row.target_semester || "All") as TargetYear,
-    targetSemester: (row.target_year || row.target_semester || "All") as TargetYear,
+    targetYear: chosenYear,
+    targetSemester: chosenYear,
   };
 }
 
 function mapProblemToRow(p: CodingProblem): Record<string, any> {
   const chosenYear = p.targetYear || p.targetSemester || "All";
+  // Embed year in tags so it persists reliably in Supabase without requiring optional schema columns
+  const baseTags = (p.tags || []).filter((t) => typeof t === "string" && !t.startsWith("year:"));
+  if (chosenYear && chosenYear !== "All") {
+    baseTags.push(`year:${chosenYear}`);
+  }
+
   return {
     id: p.id,
     slug: p.slug || p.id,
@@ -178,12 +192,10 @@ function mapProblemToRow(p: CodingProblem): Record<string, any> {
     is_published: p.isPublished,
     description: p.description,
     constraints: p.constraints,
-    tags: p.tags,
+    tags: baseTags,
     starter_code: p.starterCode,
     sample_test_cases: p.sampleTestCases,
     hidden_test_cases: p.hiddenTestCases,
-    target_year: chosenYear,
-    target_semester: chosenYear,
     updated_at: new Date().toISOString(),
   };
 }
@@ -194,7 +206,7 @@ function mapProblemToRow(p: CodingProblem): Record<string, any> {
  * Public problem columns that omit hidden test cases to protect evaluation integrity.
  */
 const PUBLIC_PROBLEM_COLUMNS =
-  "id, slug, title, difficulty, category, points, published_by, published_at, is_published, description, constraints, tags, starter_code, sample_test_cases, target_year, target_semester, created_at, updated_at";
+  "id, slug, title, difficulty, category, points, published_by, published_at, is_published, description, constraints, tags, starter_code, sample_test_cases, created_at, updated_at";
 
 /**
  * Get all published problems for students (omitting secret evaluation cases).

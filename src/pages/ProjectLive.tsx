@@ -37,7 +37,7 @@ function normaliseProject(raw: any) {
   };
 }
 
-type SandboxMode = "stackblitz" | "codesandbox" | "githubdev" | "gitpod" | "github";
+type SandboxMode = "demo" | "stackblitz" | "codesandbox" | "githubdev" | "gitpod" | "github";
 
 function buildSandboxUrl(
   mode: SandboxMode,
@@ -47,7 +47,7 @@ function buildSandboxUrl(
 ): string {
   switch (mode) {
     case "stackblitz":
-      return `https://stackblitz.com/github/${owner}/${repo}?embed=1&theme=dark`;
+      return `https://stackblitz.com/github/${owner}/${repo}?embed=1&theme=dark&view=preview`;
     case "codesandbox":
       return `https://codesandbox.io/embed/github/${owner}/${repo}?fontsize=14&theme=dark&view=preview`;
     case "githubdev":
@@ -56,6 +56,8 @@ function buildSandboxUrl(
       return `https://gitpod.io/#https://github.com/${owner}/${repo}`;
     case "github":
       return `https://github.com/${owner}/${repo}`;
+    case "demo":
+      return "";
   }
 }
 
@@ -107,18 +109,29 @@ const ProjectLive = () => {
   // ── When project loads, pick best initial sandbox ──────────────────────────
   useEffect(() => {
     if (!project) return;
-    const lang = (project.language || "").toLowerCase();
-    if (lang === "python") {
-      // Python repos: Gitpod opens a full cloud IDE
-      setSandboxMode("gitpod");
+    if (project.demo) {
+      // If deployed live demo is provided, default to it
+      setSandboxMode("demo");
     } else {
-      // JS/TS repos: StackBlitz is fastest
-      setSandboxMode("stackblitz");
+      const lang = (project.language || "").toLowerCase();
+      if (lang === "python") {
+        setSandboxMode("gitpod");
+      } else {
+        setSandboxMode("stackblitz");
+      }
     }
     setIframeLoaded(false);
     setIframeError(false);
     setIframeKey((k) => k + 1);
   }, [project]);
+
+  // Prevent infinite spinner if iframe doesn't trigger onLoad (cross-origin / slow container)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIframeLoaded(true);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [iframeKey, sandboxMode]);
 
   const gitInfo = project ? parseGitHubUrl(project.github) : null;
 
@@ -140,25 +153,28 @@ const ProjectLive = () => {
     setRetryCount((c) => c + 1);
   };
 
+  const sandboxLabel: Record<SandboxMode, string> = {
+    demo: "🌐 Live App Demo",
+    stackblitz: "⚡ StackBlitz",
+    codesandbox: "📦 CodeSandbox",
+    githubdev: "💻 Web VS Code",
+    gitpod: "🖥️ Gitpod IDE",
+    github: "🐙 GitHub",
+  };
+
+  const sandboxOrder: SandboxMode[] = project?.demo
+    ? ["demo", "stackblitz", "codesandbox", "githubdev", "gitpod", "github"]
+    : ["stackblitz", "codesandbox", "githubdev", "gitpod", "github"];
+
   const tryNextSandbox = () => {
-    const order: SandboxMode[] = ["stackblitz", "codesandbox", "githubdev", "gitpod", "github"];
-    const idx = order.indexOf(sandboxMode);
-    const next = order[idx + 1] || "github";
+    const idx = sandboxOrder.indexOf(sandboxMode);
+    const next = sandboxOrder[idx + 1] || sandboxOrder[0];
     setSandboxMode(next);
     setIframeLoaded(false);
     setIframeError(false);
     setIframeKey((k) => k + 1);
   };
 
-  const sandboxLabel: Record<SandboxMode, string> = {
-    stackblitz: "⚡ StackBlitz",
-    codesandbox: "📦 CodeSandbox",
-    githubdev: "💻 GitHub.dev (Web VS Code)",
-    gitpod: "🖥️ Gitpod IDE",
-    github: "🐙 GitHub",
-  };
-
-  const sandboxOrder: SandboxMode[] = ["stackblitz", "codesandbox", "githubdev", "gitpod", "github"];
   const hasNextSandbox = sandboxOrder.indexOf(sandboxMode) < sandboxOrder.length - 1;
 
   if (loading || !project) {
@@ -170,7 +186,9 @@ const ProjectLive = () => {
   }
 
   const srcUrl =
-    gitInfo && sandboxMode !== "github"
+    sandboxMode === "demo" && project.demo
+      ? project.demo
+      : gitInfo && sandboxMode !== "github"
       ? buildSandboxUrl(sandboxMode, gitInfo.owner, gitInfo.repo)
       : null;
 
@@ -202,7 +220,7 @@ const ProjectLive = () => {
 
           <div className="flex items-center gap-2 flex-wrap">
             {/* Sandbox Switcher Pills */}
-            {gitInfo && (
+            {(gitInfo || project.demo) && (
               <div className="flex items-center gap-1 glass border-white/30 dark:border-white/10 rounded-full p-1 shadow-xs">
                 {sandboxOrder.map((mode) => (
                   <button
@@ -220,7 +238,7 @@ const ProjectLive = () => {
                     }`}
                     title={`Open with ${mode}`}
                   >
-                    {mode === "stackblitz" ? "⚡ StackBlitz" : mode === "codesandbox" ? "📦 CodeSandbox" : mode === "githubdev" ? "💻 Web VSCode" : mode === "gitpod" ? "🖥 Gitpod" : "🐙 GitHub"}
+                    {mode === "demo" ? "🌐 Live Demo" : mode === "stackblitz" ? "⚡ StackBlitz" : mode === "codesandbox" ? "📦 CodeSandbox" : mode === "githubdev" ? "💻 Web VSCode" : mode === "gitpod" ? "🖥 Gitpod" : "🐙 GitHub"}
                   </button>
                 ))}
               </div>
@@ -320,6 +338,19 @@ const ProjectLive = () => {
               )}
               {iframeError && (
                 <span className="text-[10px] text-rose-700 dark:text-rose-300 font-semibold bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20 uppercase tracking-wider">● Switch Sandbox</span>
+              )}
+
+              {srcUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(srcUrl, "_blank")}
+                  className="h-7 px-2.5 text-xs gap-1.5 rounded-lg glass border-white/20 font-medium text-foreground hover:text-primary transition-colors"
+                  title="Launch in separate browser window"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-[11px]">Launch Window</span>
+                </Button>
               )}
 
               <Button
@@ -457,8 +488,8 @@ const ProjectLive = () => {
                 className="w-full h-full"
                 style={{ border: "none" }}
                 title={`${project.title} — ${sandboxLabel[sandboxMode]}`}
-                allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking; clipboard-write"
-                sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts allow-downloads"
+                allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking; clipboard-write; cross-origin-isolated"
+                sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts allow-downloads"
                 onLoad={handleIframeLoad}
                 onError={handleIframeError}
               />

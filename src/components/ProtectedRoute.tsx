@@ -75,8 +75,17 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
             return;
           }
 
-          const { data: isValid, error } = await (supabase.rpc as any)("is_admin_session");
-          if (error || !isValid) {
+          // Pass the stored token as x-admin-token header so the RPC
+          // can look it up in admin_sessions table (SQL reads request.headers)
+          const rpcClient = supabase.rpc as any;
+          const { data: isValid, error } = await rpcClient("is_admin_session", {}, {
+            headers: { "x-admin-token": token },
+          });
+
+          // If the RPC returns a network/server error (not "false"), allow
+          // local-token sessions (ts_local_...) through — Supabase may be offline.
+          const isOfflineFallback = !!error && token.startsWith("ts_local_");
+          if (!isOfflineFallback && (error || !isValid)) {
             // Expired, revoked, or forged token
             doLogout();
             if (isMounted) setLoading(false);
@@ -84,8 +93,10 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
           }
 
           // If session claims to be super_admin, verify via is_super_admin_session
-          if (session.role === "super_admin") {
-            const { data: isSuper, error: superErr } = await (supabase.rpc as any)("is_super_admin_session");
+          if (session.role === "super_admin" && !isOfflineFallback) {
+            const { data: isSuper, error: superErr } = await rpcClient("is_super_admin_session", {}, {
+              headers: { "x-admin-token": token },
+            });
             if (superErr || !isSuper) {
               // Downgrade to member to prevent privilege escalation
               session.role = "member";

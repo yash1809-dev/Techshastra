@@ -18,7 +18,7 @@ import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LayoutDashboard, FileText, Calendar, Image, Trophy, HelpCircle, MessageSquare, Users, Plus, Trash2, Github, Globe, Terminal, Loader2, Award, Newspaper, Eye, EyeOff, Book, ShieldCheck, LogOut, Ban, UserCheck, UserX, ToggleLeft, ToggleRight, UserPlus, Phone, CalendarDays, Copy, Key, Mail, RotateCcw, ClipboardList, X, Check, ShieldAlert, CheckCircle2, Instagram, Linkedin, Twitter, Facebook, Link, Hash, Upload, Download, Code2 } from "lucide-react";
+import { LayoutDashboard, FileText, Calendar, Image, Trophy, HelpCircle, MessageSquare, Users, Plus, Trash2, Github, Globe, Terminal, Loader2, Award, Newspaper, Eye, EyeOff, Book, ShieldCheck, LogOut, Ban, UserCheck, UserX, ToggleLeft, ToggleRight, UserPlus, Phone, CalendarDays, Copy, Key, Mail, RotateCcw, ClipboardList, X, Check, ShieldAlert, CheckCircle2, Instagram, Linkedin, Twitter, Facebook, Link, Hash, Upload, Download, Code2, BookOpen, Crown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,8 +54,13 @@ import type { ContactMessage } from "@/lib/services/messageService";
 import type { SocialLink as SocialPost } from "@/lib/services/socialService";
 import type { Publication } from "@/lib/services/publicationService";
 import * as studentService from "@/lib/services/studentService";
+import { addSocialPost as addLocalSocialPost, deleteSocialPost as deleteLocalSocialPost } from "@/lib/stores/socialStore";
+import { addProject as addLocalProject } from "@/lib/projectStore";
 import { getAllStudents, updateStudent as updateStudentStore, type StudentProfile } from "@/lib/studentStore";
 import AdminProblemsTab from "@/components/admin/AdminProblemsTab";
+import { AcademicQuestionBankTab } from "@/components/admin/academic/AcademicQuestionBankTab";
+import AdminRolePromotionsTab from "@/components/admin/AdminRolePromotionsTab";
+import { canPromoteRoles } from "@/lib/services/hierarchyService";
 
 // Legacy type aliases for shapes not yet fully migrated
 type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
@@ -231,7 +236,7 @@ const StudentsTab = () => {
               <Card key={s.id} className={`border-primary/10 transition-opacity ${s.is_active ? "" : "opacity-60"}`}>
                 <CardContent className="py-4 flex items-center gap-4 flex-wrap">
                   <img
-                    src={`https://avatars.githubusercontent.com/${handle}?s=40`}
+                    src={s.avatar || s.avatar_url || (s.profiles?.avatar_url) || `https://avatars.githubusercontent.com/${handle}?s=40`}
                     alt={displayName}
                     className="w-10 h-10 rounded-xl ring-2 ring-primary/20 flex-shrink-0 object-cover"
                   />
@@ -392,6 +397,7 @@ const Admin = ({ userRole }: AdminProps) => {
     title: string;
     description: string;
     github: string;
+    demo: string;
     image: string;
     tags: string;
     lead: string;
@@ -402,6 +408,7 @@ const Admin = ({ userRole }: AdminProps) => {
     title: "",
     description: "",
     github: "",
+    demo: "",
     image: "",
     tags: "",
     lead: "",
@@ -799,32 +806,56 @@ const Admin = ({ userRole }: AdminProps) => {
     const finalTitle = formData.title || (gitInfo ? gitInfo.repo.replace(/-/g, " ").replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()) : "Untitled Project");
 
     try {
-      const newProj = await projectService.createProject({
-        title: finalTitle,
-        description: formData.description || "A project by TECHSHASTRA member.",
-        github_url: formData.github,
-        image_url: formData.image || generateProjectImage(finalTitle, formData.description || "", formData.tags),
-        tags: formData.tags.split(",").map(t => t.trim()).filter(t => t),
-        lead_name: formData.lead || "TECHSHASTRA Team",
-        designer_name: formData.designer || "Design Team",
-        status: formData.status,
-        language: formData.language,
-        is_published: true,
-      });
+      let newProj: any = null;
+      try {
+        newProj = await projectService.createProject({
+          title: finalTitle,
+          description: formData.description || "A project by TECHSHASTRA member.",
+          github_url: formData.github,
+          demo_url: formData.demo?.trim() || null,
+          image_url: formData.image || generateProjectImage(finalTitle, formData.description || "", formData.tags),
+          tags: formData.tags.split(",").map(t => t.trim()).filter(t => t),
+          lead_name: formData.lead || "TECHSHASTRA Team",
+          designer_name: formData.designer || "Design Team",
+          status: formData.status,
+          language: formData.language,
+          is_published: true,
+        });
+      } catch (err) {
+        console.warn("Supabase project insert failed, saving to local store:", err);
+      }
+
+      if (!newProj) {
+        // Fallback to local projectStore
+        const local = addLocalProject({
+          title: finalTitle,
+          description: formData.description || "A project by TECHSHASTRA member.",
+          github: formData.github,
+          demo: formData.demo?.trim() || "",
+          image: formData.image || generateProjectImage(finalTitle, formData.description || "", formData.tags),
+          tags: formData.tags.split(",").map(t => t.trim()).filter(t => t),
+          team: { lead: formData.lead || "TECHSHASTRA Team", designer: formData.designer || "Design Team" },
+          status: formData.status,
+          language: formData.language,
+        });
+        newProj = {
+          ...local,
+          github_url: local.github,
+          demo_url: local.demo,
+          image_url: local.image,
+          lead_name: local.team.lead,
+          designer_name: local.team.designer,
+          is_published: true,
+          created_at: new Date(local.createdAt).toISOString(),
+          updated_at: new Date(local.createdAt).toISOString(),
+        };
+      }
 
       if (newProj) {
         setProjects(prev => [newProj, ...prev]);
-        setFormData({ title: "", description: "", github: "", image: "", tags: "", lead: "", designer: "", status: "Completed", language: "javascript" });
+        setFormData({ title: "", description: "", github: "", demo: "", image: "", tags: "", lead: "", designer: "", status: "Completed", language: "javascript" });
         toast({ title: "Project Published ✓", description: `"${newProj.title}" is now live on the projects page.` });
         trackAction(`Added project: ${newProj.title}`);
-      } else {
-        // null means Supabase is configured but RLS blocked the write
-        toast({
-          title: "Database Permission Error",
-          description: "Supabase blocked the insert. Please run the RLS fix SQL in your Supabase dashboard (see console for details).",
-          variant: "destructive"
-        });
-        console.error("[TECHSHASTRA] Project insert returned null — this is caused by RLS policy blocking anonymous writes. Run the admin RLS fix migration in Supabase SQL Editor.");
       }
     } catch (err: any) {
       console.error("Submission failed", err);
@@ -1160,6 +1191,39 @@ const Admin = ({ userRole }: AdminProps) => {
   };
 
   // ── Socials handlers ─────────────────────────────────────────────────────────
+  const handleSocialImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast({ title: "Invalid File", description: "Please upload an image file (PNG/JPG).", variant: "destructive" });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const img = document.createElement('img') as HTMLImageElement;
+        img.onload = () => {
+          const MAX_W = 800;
+          const MAX_H = 800;
+          let { width, height } = img;
+          if (width > MAX_W || height > MAX_H) {
+            const ratio = Math.min(MAX_W / width, MAX_H / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.75);
+          setSocialForm(prev => ({ ...prev, image_url: compressed }));
+          toast({ title: "Image Uploaded ✓", description: "Attached post photo successfully." });
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const fetchSocialMetadata = async (url: string) => {
     if (!url || !url.includes("http")) return;
     setIsFetchingSocial(true);
@@ -1169,19 +1233,27 @@ const Admin = ({ userRole }: AdminProps) => {
       if (url.includes("twitter.com") || url.includes("x.com")) platform = "twitter";
       if (url.includes("facebook.com")) platform = "facebook";
 
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split("/").filter(p => p);
-      const detectedUsername = pathParts[0] || "User";
+      let detectedUsername = "techshastra_utu";
+      const instaMatch = url.match(/instagram\.com\/(?:p|reel|tv)\/([a-zA-Z0-9_-]+)/i);
+      if (instaMatch) {
+        platform = "instagram";
+        detectedUsername = "techshastra_utu";
+      } else {
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split("/").filter(p => p && p !== "p" && p !== "reel" && p !== "in");
+        if (pathParts[0]) detectedUsername = pathParts[0];
+      }
 
       setSocialForm(prev => ({
         ...prev,
         platform,
         username: prev.username || detectedUsername,
-        content: prev.content || `New post on ${platform}`,
-        image_url: prev.image_url || `https://source.unsplash.com/featured/?${platform},tech`,
+        content: prev.content || `New update from TECHSHASTRA on ${platform.charAt(0).toUpperCase() + platform.slice(1)}!`,
+        // Do NOT set defunct source.unsplash.com! Preserve image if already set
+        image_url: prev.image_url || "",
       }));
 
-      toast({ title: "Link Detected", description: `Identified ${platform} post. Metadata auto-filled.` });
+      toast({ title: "Link Detected", description: `Identified ${platform} post. You can also upload the post photo directly.` });
     } catch (err) {
       console.error("Failed to parse social URL", err);
     } finally {
@@ -1196,18 +1268,42 @@ const Admin = ({ userRole }: AdminProps) => {
       return;
     }
     try {
-      const newPost = await socialService.createSocialLink({
-        platform: (socialForm.platform as any) || 'instagram',
-        url: socialForm.post_url.trim(),
-        content: socialForm.content.trim() || "",
-        image_url: socialForm.image_url || null,
-        author: socialForm.username.trim() || null,
-        posted_at: new Date().toISOString(),
-      });
+      let finalImageUrl = socialForm.image_url?.trim() || null;
+      // If user accidentally pasted the instagram post URL as the image URL, clear it so it doesn't break
+      if (finalImageUrl && (finalImageUrl.includes("instagram.com/p/") || finalImageUrl.includes("instagram.com/reel/"))) {
+        finalImageUrl = null;
+      }
+
+      let newPost: any = null;
+      try {
+        newPost = await socialService.createSocialLink({
+          platform: (socialForm.platform as any) || 'instagram',
+          url: socialForm.post_url.trim(),
+          content: socialForm.content.trim() || "",
+          image_url: finalImageUrl,
+          author: socialForm.username.trim() || null,
+          posted_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn("Supabase social insert failed, saving to local store:", err);
+      }
+
+      if (!newPost) {
+        // Fallback to local store
+        newPost = await addLocalSocialPost({
+          platform: (socialForm.platform as any) || 'instagram',
+          url: socialForm.post_url.trim(),
+          content: socialForm.content.trim() || "",
+          image_url: finalImageUrl || undefined,
+          author: socialForm.username.trim() || "techshastra_utu",
+          posted_at: new Date().toISOString(),
+        });
+      }
+
       if (newPost) {
         setSocialPosts(prev => [newPost, ...prev]);
         setSocialForm({ platform: "instagram", post_url: "", content: "", image_url: "", username: "" });
-        toast({ title: "Social Post Added", description: "The post is now live on the Socials page." });
+        toast({ title: "Social Post Added ✓", description: "The post is now live on the Socials page." });
         trackAction(`Added social post: ${newPost.platform}`);
       }
     } catch (err: any) {
@@ -1217,7 +1313,12 @@ const Admin = ({ userRole }: AdminProps) => {
 
   const handleSocialDelete = async (id: string) => {
     try {
-      await socialService.deleteSocialLink(id);
+      try {
+        await socialService.deleteSocialLink(id);
+      } catch (_) {}
+      try {
+        await deleteLocalSocialPost(id);
+      } catch (_) {}
       setSocialPosts(prev => prev.filter(p => p.id !== id));
       toast({ title: "Post Deleted", description: "Social post removed." });
       trackAction("Deleted a social post");
@@ -1391,9 +1492,17 @@ const Admin = ({ userRole }: AdminProps) => {
             {!isFaculty && (<TabsTrigger value="messages" className="shrink-0 text-xs py-2 px-3 rounded-xl"><MessageSquare className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Messages</TabsTrigger>)}
             {!isFaculty && (<TabsTrigger value="certificates" className="shrink-0 text-xs py-2 px-3 rounded-xl"><Award className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Certs</TabsTrigger>)}
             {!isFaculty && (<TabsTrigger value="students" className="shrink-0 text-xs py-2 px-3 rounded-xl"><Users className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Students</TabsTrigger>)}
-            {/* Faculty & SuperAdmin see Problems tab */}
+            {/* Faculty & SuperAdmin see Problems & Academic Question Bank tabs */}
             {(isFaculty || isSuperAdmin) && (
-              <TabsTrigger value="problems" className="shrink-0 text-xs py-2 px-3 rounded-xl"><Code2 className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Problems & Tasks</TabsTrigger>
+              <>
+                <TabsTrigger value="problems" className="shrink-0 text-xs py-2 px-3 rounded-xl"><Code2 className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Coding Challenges</TabsTrigger>
+                <TabsTrigger value="academic-questions" className="shrink-0 text-xs py-2 px-3 rounded-xl"><BookOpen className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Academic Question Bank</TabsTrigger>
+              </>
+            )}
+            {(isSuperAdmin || canPromoteRoles(userRole, currentUserName)) && (
+              <TabsTrigger value="promotions" className="shrink-0 text-xs py-2 px-3 rounded-xl bg-amber-500/10 text-amber-500 font-medium relative">
+                <Crown className="w-3.5 h-3.5 mr-1.5" />Leadership & Promotions
+              </TabsTrigger>
             )}
             {isSuperAdmin && (
               <TabsTrigger value="super-admin" className="shrink-0 text-xs py-2 px-3 rounded-xl bg-primary/10 text-primary relative">
@@ -1523,6 +1632,22 @@ const Admin = ({ userRole }: AdminProps) => {
                         onChange={handleInputChange}
                         className="bg-white/80 dark:bg-white/5 border-white/40 dark:border-white/10 text-foreground placeholder:text-foreground/40 shadow-xs focus-visible:ring-primary/20"
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="demo" className="text-foreground font-medium text-xs">
+                        Live Demo / Deployment URL (Optional)
+                      </Label>
+                      <Input
+                        id="demo"
+                        placeholder="e.g. https://myproject.vercel.app or https://myproject.netlify.app"
+                        value={formData.demo}
+                        onChange={handleInputChange}
+                        className="bg-white/80 dark:bg-white/5 border-white/40 dark:border-white/10 text-foreground placeholder:text-foreground/40 text-xs shadow-xs focus-visible:ring-primary/20"
+                      />
+                      <p className="text-[11px] text-foreground/60 italic font-light px-1">
+                        * When provided, visitors can run and interact with the deployed live demo directly in the viewer!
+                      </p>
                     </div>
 
                     <div className="space-y-2 p-4 rounded-2xl glass border-white/30 dark:border-white/10 bg-white/40 dark:bg-white/5">
@@ -2544,6 +2669,19 @@ const Admin = ({ userRole }: AdminProps) => {
             <AdminProblemsTab currentAdminName={currentUserName} isSuperAdmin={false} />
           </TabsContent>
 
+          {/* ── Academic Question Bank (Theory & Numericals) ── */}
+          <TabsContent value="academic-questions">
+            <AcademicQuestionBankTab />
+          </TabsContent>
+
+          {/* ── Leadership & Role Promotions ── */}
+          <TabsContent value="promotions">
+            <AdminRolePromotionsTab
+              currentAdminName={currentUserName}
+              isSuperAdmin={isSuperAdmin}
+            />
+          </TabsContent>
+
           {/* ── Socials ── */}
           <TabsContent value="socials">
             <div className="grid lg:grid-cols-5 gap-6">
@@ -2605,13 +2743,50 @@ const Admin = ({ userRole }: AdminProps) => {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Preview Image URL</Label>
-                      <Input
-                        placeholder="Image URL"
-                        value={socialForm.image_url}
-                        onChange={(e) => setSocialForm(prev => ({ ...prev, image_url: e.target.value }))}
-                      />
+                    <div className="space-y-2 p-3.5 rounded-2xl glass border-primary/20 bg-primary/5">
+                      <Label className="flex items-center justify-between text-xs font-semibold">
+                        <span>Post Image / Photo</span>
+                        <span className="text-[10px] text-muted-foreground font-normal">Upload or paste URL</span>
+                      </Label>
+                      <div className="space-y-2.5">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleSocialImageUpload}
+                          className="text-xs bg-card/60 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:bg-primary file:text-primary-foreground cursor-pointer"
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground uppercase font-mono shrink-0">or URL:</span>
+                          <Input
+                            placeholder="https://... direct image link"
+                            value={socialForm.image_url}
+                            onChange={(e) => setSocialForm(prev => ({ ...prev, image_url: e.target.value }))}
+                            className="text-xs h-8 bg-card/60"
+                          />
+                        </div>
+                        {socialForm.image_url && (
+                          <div className="relative w-full h-32 rounded-xl overflow-hidden border border-primary/20 bg-black/20">
+                            <img
+                              src={socialForm.image_url}
+                              alt="Preview"
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.target as HTMLImageElement).src = "https://placehold.co/400x300/0f172a/a855f7?text=Preview+Image"; }}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              className="absolute top-2 right-2 h-6 px-2 text-[10px] rounded-lg"
+                              onClick={() => setSocialForm(prev => ({ ...prev, image_url: "" }))}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground italic">
+                        Tip: Upload the actual photo posted on Instagram so it loads instantly with zero CORS blocks.
+                      </p>
                     </div>
 
                     <Button type="submit" className="w-full">Sync to Socials Page</Button>

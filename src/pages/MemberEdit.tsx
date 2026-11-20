@@ -366,7 +366,7 @@ const MemberEdit = () => {
             ...remote,
             githubUsername: remote.github_username || remote.githubUsername,
             name: remote.name || remote.username,
-            avatar: remote.avatar || remote.avatar_url || (remote as any).profiles?.avatar_url,
+            avatar: (remote as any).avatar || (remote as any).avatar_url || (remote as any).profiles?.avatar_url,
             linkedinUrl: remote.linkedin_url || (remote as any).linkedinUrl,
             portfolioUrl: remote.portfolio_url || (remote as any).portfolioUrl,
             education: remote.education || [],
@@ -393,6 +393,60 @@ const MemberEdit = () => {
     fetchMember();
   }, [username, isOwn, navigate]);
 
+  // Helper to persist avatar immediately across stores and backend
+  const applyAvatar = async (newAvatarUrl: string) => {
+    setAvatar(newAvatarUrl);
+    if (!student) return;
+
+    // 1. Sync localStorage cache
+    if (student.githubUsername) {
+      if (newAvatarUrl) {
+        localStorage.setItem(`ts_avatar_${student.githubUsername}`, newAvatarUrl);
+      } else {
+        localStorage.removeItem(`ts_avatar_${student.githubUsername}`);
+      }
+    }
+
+    // 2. Sync localStore
+    const localExisting = getStudentByGithub(student.githubUsername);
+    if (localExisting) {
+      updateStudent(localExisting.id, { avatar: newAvatarUrl || undefined });
+    }
+    updateStudent(student.id, { avatar: newAvatarUrl || undefined });
+
+    // 3. Sync Supabase backend
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase
+          .from("student_profiles")
+          .update({ avatar_url: newAvatarUrl || null } as any)
+          .eq("id", student.id);
+
+        const { data: authData } = await supabase.auth.getUser();
+        const targetUserId = authData?.user?.id || (student as any).user_id || session?.studentId;
+        if (targetUserId) {
+          await supabase
+            .from("profiles")
+            .update({ avatar_url: newAvatarUrl || null })
+            .eq("id", targetUserId);
+        }
+      } catch (_e) {
+        console.warn("Supabase avatar update warning:", _e);
+      }
+    }
+
+    // 4. Dispatch targeted event
+    window.dispatchEvent(
+      new CustomEvent("ts_avatar_updated", {
+        detail: {
+          avatarUrl: newAvatarUrl || "",
+          studentId: student.id,
+          githubUsername: student.githubUsername,
+        },
+      })
+    );
+  };
+
   // Handle local image file upload & compression
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -412,8 +466,8 @@ const MemberEdit = () => {
         const path = `${session.studentId}/avatar_${Date.now()}.${ext}`;
         const { url, error } = await uploadFile("avatars", path, file);
         if (url && !error) {
-          setAvatar(url);
-          toast({ title: "Avatar uploaded ✓" });
+          await applyAvatar(url);
+          toast({ title: "Avatar uploaded & saved ✓" });
           setAvatarUploading(false);
           return;
         }
@@ -421,9 +475,9 @@ const MemberEdit = () => {
 
       // 2. Fallback: Compress to responsive Data URL
       const reader = new FileReader();
-      reader.onload = (readerEvent) => {
+      reader.onload = async (readerEvent) => {
         const img = new Image();
-        img.onload = () => {
+        img.onload = async () => {
           const canvas = document.createElement("canvas");
           const MAX_SIZE = 400;
           let width = img.width;
@@ -446,8 +500,8 @@ const MemberEdit = () => {
           const ctx = canvas.getContext("2d");
           ctx?.drawImage(img, 0, 0, width, height);
           const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-          setAvatar(dataUrl);
-          toast({ title: "Avatar updated locally ✓" });
+          await applyAvatar(dataUrl);
+          toast({ title: "Avatar updated & saved ✓" });
           setAvatarUploading(false);
         };
         img.src = readerEvent.target?.result as string;
@@ -464,30 +518,55 @@ const MemberEdit = () => {
     setSaving(true);
     try {
       await updateStudentProfile(student.id, {
+        avatar_url: avatar || null,
         bio: bio || null,
         linkedin_url: linkedinUrl || null,
         portfolio_url: portfolioUrl || null,
         skills,
-      });
+      } as any);
 
-      // Update avatar in profiles table if session exists
-      if (isSupabaseConfigured() && session?.studentId && avatar) {
-        await supabase
-          .from("profiles")
-          .update({ avatar_url: avatar })
-          .eq("id", session.studentId);
+      // Update avatar in profiles table as well
+      if (isSupabaseConfigured()) {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          const targetUserId = authData?.user?.id || (student as any).user_id || session?.studentId;
+          if (targetUserId) {
+            await supabase
+              .from("profiles")
+              .update({ avatar_url: avatar || null })
+              .eq("id", targetUserId);
+          }
+        } catch (_avatarErr) {}
       }
     } catch (_err) {}
-    updateStudent(student.id, {
-      avatar: avatar || undefined,
-      bio: bio || undefined,
-      linkedinUrl: linkedinUrl || undefined,
-      portfolioUrl: portfolioUrl || undefined,
-      skills,
-      education,
-      experience,
-      certifications,
-    });
+
+    await applyAvatar(avatar);
+
+    const localExisting = getStudentByGithub(student.githubUsername);
+    if (localExisting) {
+      updateStudent(localExisting.id, {
+        avatar: avatar || undefined,
+        bio: bio || undefined,
+        linkedinUrl: linkedinUrl || undefined,
+        portfolioUrl: portfolioUrl || undefined,
+        skills,
+        education,
+        experience,
+        certifications,
+      });
+    } else {
+      updateStudent(student.id, {
+        avatar: avatar || undefined,
+        bio: bio || undefined,
+        linkedinUrl: linkedinUrl || undefined,
+        portfolioUrl: portfolioUrl || undefined,
+        skills,
+        education,
+        experience,
+        certifications,
+      });
+    }
+
     setSaving(false);
     setSaved(true);
     toast({ title: "Profile saved ✓" });
@@ -569,7 +648,7 @@ const MemberEdit = () => {
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() => setAvatar("")}
+                        onClick={() => applyAvatar("")}
                         className="rounded-full text-xs font-light gap-1.5 h-8 px-3.5 text-foreground/60"
                       >
                         <RefreshCw size={12} /> Reset to GitHub Avatar

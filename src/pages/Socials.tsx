@@ -16,6 +16,181 @@ type FeedItem =
   | { type: "social"; data: any }
   | { type: "achievement"; data: any };
 
+const extractInstagramShortcode = (url?: string): string | null => {
+  if (!url) return null;
+  const match = url.match(/instagram\.com\/(?:p|reel|tv)\/([a-zA-Z0-9_-]+)/i);
+  return match ? match[1] : null;
+};
+
+interface SocialImagePreviewProps {
+  data: any;
+  platformIcon: React.ReactNode;
+}
+
+const SocialImagePreview = ({ data, platformIcon }: SocialImagePreviewProps) => {
+  const instaShortcode = extractInstagramShortcode(data.post_url) || extractInstagramShortcode(data.image_url);
+
+  // Always load the embed of the post by default when a shortcode exists
+  const [showEmbed, setShowEmbed] = useState<boolean>(!!instaShortcode);
+  const [embedLoaded, setEmbedLoaded] = useState<boolean>(false);
+  const [embedFailed, setEmbedFailed] = useState<boolean>(false);
+  const [imgFailed, setImgFailed] = useState<boolean>(false);
+
+  // If embed fails or network timeout occurs, fall back to generated thumbnail
+  useEffect(() => {
+    if (instaShortcode && showEmbed) {
+      setEmbedLoaded(false);
+      setEmbedFailed(false);
+      const timer = setTimeout(() => {
+        // If not loaded after 6 seconds, assume embed is blocked/failed and fall back to generated thumbnail
+        setEmbedLoaded((prevLoaded) => {
+          if (!prevLoaded) {
+            setEmbedFailed(true);
+          }
+          return prevLoaded;
+        });
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [instaShortcode, showEmbed]);
+
+  // If image_url is an HTML page URL or dead unsplash service, treat as non-image
+  const isHtmlOrDeadUrl = data.image_url && (
+    data.image_url.includes("instagram.com/p/") ||
+    data.image_url.includes("instagram.com/reel/") ||
+    data.image_url.includes("source.unsplash.com")
+  );
+
+  const hasDirectImage = !!data.image_url && !isHtmlOrDeadUrl && !imgFailed;
+
+  // 1. By default: load the live Instagram embed
+  if (instaShortcode && showEmbed && !embedFailed) {
+    return (
+      <div className="relative aspect-square w-full overflow-hidden bg-black/40">
+        {!embedLoaded && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-card/80 backdrop-blur-xs z-10">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-[11px] text-muted-foreground font-medium">Loading Instagram Embed…</span>
+          </div>
+        )}
+        <iframe
+          src={`https://www.instagram.com/p/${instaShortcode}/embed/`}
+          className="w-full h-full border-0"
+          title={`Instagram Post ${instaShortcode}`}
+          scrolling="no"
+          allowTransparency
+          onLoad={() => setEmbedLoaded(true)}
+          onError={() => setEmbedFailed(true)}
+        />
+        {/* Toggle button to switch to thumbnail */}
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setShowEmbed(false)}
+            className="text-[10px] bg-background/85 hover:bg-background px-2.5 py-1 rounded-full text-foreground shadow-md font-medium border border-border backdrop-blur-md transition-colors"
+            title="Switch to thumbnail view"
+          >
+            Show Thumbnail
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Direct Image rendering (if available and user toggled away from embed or non-insta)
+  if (hasDirectImage) {
+    return (
+      <div className="relative aspect-square overflow-hidden bg-muted/20">
+        <img
+          src={data.image_url}
+          alt={data.content || "Social update"}
+          onError={() => setImgFailed(true)}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+        />
+        <div className="absolute top-4 left-4 z-10">
+          <Badge className="bg-background/85 backdrop-blur-md text-foreground border-none flex gap-2 items-center py-1.5 px-3 shadow-sm">
+            {platformIcon}
+            <span className="capitalize text-xs font-semibold">{data.platform}</span>
+          </Badge>
+        </div>
+        {instaShortcode && (
+          <button
+            type="button"
+            onClick={() => {
+              setEmbedFailed(false);
+              setShowEmbed(true);
+            }}
+            className="absolute bottom-3 right-3 z-10 text-[10px] bg-background/85 hover:bg-background backdrop-blur-md text-foreground px-2.5 py-1 rounded-full font-medium shadow-md transition-all flex items-center gap-1.5 border border-white/20"
+            title="Load live Instagram embed"
+          >
+            <span>Load Live Embed</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // 3. Generated Thumbnail Fallback
+  // If embed can't fetch / fails or image is not available:
+  // Render a high-quality, dynamically generated platform thumbnail!
+  const isInsta = data.platform === "instagram" || !!instaShortcode;
+  const isLinkedIn = data.platform === "linkedin";
+  const isTwitter = data.platform === "twitter";
+
+  const gradientClass = isInsta
+    ? "from-amber-500/25 via-rose-500/30 to-purple-600/40 border-rose-500/30"
+    : isLinkedIn
+    ? "from-blue-600/25 via-sky-500/20 to-indigo-600/35 border-blue-500/30"
+    : isTwitter
+    ? "from-slate-800/50 via-sky-500/15 to-slate-900/50 border-sky-500/30"
+    : "from-primary/25 via-purple-500/20 to-blue-500/25 border-primary/30";
+
+  return (
+    <div className={`relative aspect-square overflow-hidden bg-gradient-to-br ${gradientClass} flex flex-col justify-between p-6 border-b group-hover:brightness-105 transition-all`}>
+      <div className="flex items-center justify-between z-10">
+        <Badge className="bg-background/85 backdrop-blur-md text-foreground border-none flex gap-2 items-center py-1.5 px-3 shadow-xs">
+          {platformIcon}
+          <span className="capitalize text-xs font-semibold">{data.platform}</span>
+        </Badge>
+        {instaShortcode && (
+          <button
+            type="button"
+            onClick={() => {
+              setEmbedFailed(false);
+              setShowEmbed(true);
+            }}
+            className="text-[10px] bg-background/85 hover:bg-background text-foreground px-2.5 py-1 rounded-full font-medium shadow-xs border border-white/20 transition-colors"
+          >
+            Retry Embed
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-3 text-center py-2 px-2 z-10">
+        <div className="w-16 h-16 mx-auto rounded-3xl bg-background/80 backdrop-blur-md flex items-center justify-center text-primary shadow-lg border border-primary/25 transform group-hover:scale-110 transition-transform duration-500">
+          {platformIcon}
+        </div>
+        <div className="space-y-1">
+          <p className="font-heading font-semibold text-sm text-foreground tracking-wide">
+            {data.username ? `@${data.username}` : "@techshastra_utu"}
+          </p>
+          <p className="text-xs text-foreground/80 line-clamp-3 italic leading-relaxed px-1">
+            "{data.content || "Official update and announcement from TECHSHASTRA club community."}"
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-[10px] text-foreground/60 uppercase tracking-widest font-mono z-10 pt-2 border-t border-foreground/10">
+        <span className="flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          {isInsta ? "Instagram Post" : `${data.platform} Update`}
+        </span>
+        <span>TECHSHASTRA</span>
+      </div>
+    </div>
+  );
+};
+
 const Socials = () => {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -190,21 +365,10 @@ const Socials = () => {
                 >
                   {item.type === "social" ? (
                     <Card className="h-full overflow-hidden border-2 hover:border-primary/40 transition-all duration-500 rounded-3xl glass shadow-xl hover:shadow-primary/10">
-                      <div className="relative aspect-square overflow-hidden">
-                        {item.data.image_url && (
-                          <img
-                            src={item.data.image_url}
-                            alt=""
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                          />
-                        )}
-                        <div className="absolute top-4 left-4">
-                          <Badge className="bg-background/80 backdrop-blur-md text-foreground border-none flex gap-2 items-center py-1.5 px-3">
-                            {getPlatformIcon(item.data.platform)}
-                            <span className="capitalize text-xs font-semibold">{item.data.platform}</span>
-                          </Badge>
-                        </div>
-                      </div>
+                      <SocialImagePreview
+                        data={item.data}
+                        platformIcon={getPlatformIcon(item.data.platform)}
+                      />
                       <CardContent className="p-6">
                         <div className="flex items-center gap-3 mb-4">
                           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary">

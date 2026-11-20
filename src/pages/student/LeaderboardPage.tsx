@@ -9,6 +9,7 @@ import {
   type TypingLeaderboardItem,
   type ProblemLeaderboardItem,
 } from "@/lib/codingStore";
+import { getStudentByGithub } from "@/lib/studentStore";
 import {
   Trophy,
   Medal,
@@ -36,6 +37,12 @@ import {
 } from "@/components/ui/select";
 
 export type LeaderboardTab = "typing" | "problems" | "combined";
+
+const getEntryAvatar = (githubUsername?: string, size = 96) => {
+  if (!githubUsername) return "";
+  const local = getStudentByGithub(githubUsername);
+  return local?.avatar || `https://github.com/${githubUsername}.png?size=${size}`;
+};
 
 export const LeaderboardPage: React.FC = () => {
   const { session } = useStudentAuth();
@@ -190,7 +197,7 @@ export const LeaderboardPage: React.FC = () => {
                 <CardContent className="p-6 flex flex-col items-center">
                   <div className="relative mb-3">
                     <img
-                      src={`https://github.com/${topThreeTyping[1].githubUsername}.png?size=96`}
+                      src={getEntryAvatar(topThreeTyping[1].githubUsername, 96)}
                       alt={topThreeTyping[1].studentName}
                       className="w-16 h-16 rounded-full ring-2 ring-slate-400/60 object-cover"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -213,7 +220,7 @@ export const LeaderboardPage: React.FC = () => {
                 <CardContent className="p-6 flex flex-col items-center">
                   <div className="relative mb-3">
                     <img
-                      src={`https://github.com/${topThreeTyping[0].githubUsername}.png?size=96`}
+                      src={getEntryAvatar(topThreeTyping[0].githubUsername, 96)}
                       alt={topThreeTyping[0].studentName}
                       className="w-20 h-20 rounded-full ring-4 ring-amber-500/80 object-cover"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -239,7 +246,7 @@ export const LeaderboardPage: React.FC = () => {
                 <CardContent className="p-6 flex flex-col items-center">
                   <div className="relative mb-3">
                     <img
-                      src={`https://github.com/${topThreeTyping[2].githubUsername}.png?size=96`}
+                      src={getEntryAvatar(topThreeTyping[2].githubUsername, 96)}
                       alt={topThreeTyping[2].studentName}
                       className="w-16 h-16 rounded-full ring-2 ring-amber-700/60 object-cover"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -266,7 +273,7 @@ export const LeaderboardPage: React.FC = () => {
                 <CardContent className="p-6 flex flex-col items-center">
                   <div className="relative mb-3">
                     <img
-                      src={`https://github.com/${topThreeProblems[1].githubUsername}.png?size=96`}
+                      src={getEntryAvatar(topThreeProblems[1].githubUsername, 96)}
                       alt={topThreeProblems[1].studentName}
                       className="w-16 h-16 rounded-full ring-2 ring-slate-400/60 object-cover"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -288,7 +295,7 @@ export const LeaderboardPage: React.FC = () => {
                 <CardContent className="p-6 flex flex-col items-center">
                   <div className="relative mb-3">
                     <img
-                      src={`https://github.com/${topThreeProblems[0].githubUsername}.png?size=96`}
+                      src={getEntryAvatar(topThreeProblems[0].githubUsername, 96)}
                       alt={topThreeProblems[0].studentName}
                       className="w-20 h-20 rounded-full ring-4 ring-amber-500/80 object-cover"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -313,7 +320,7 @@ export const LeaderboardPage: React.FC = () => {
                 <CardContent className="p-6 flex flex-col items-center">
                   <div className="relative mb-3">
                     <img
-                      src={`https://github.com/${topThreeProblems[2].githubUsername}.png?size=96`}
+                      src={getEntryAvatar(topThreeProblems[2].githubUsername, 96)}
                       alt={topThreeProblems[2].studentName}
                       className="w-16 h-16 rounded-full ring-2 ring-amber-700/60 object-cover"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -340,7 +347,7 @@ export const LeaderboardPage: React.FC = () => {
                 <CardContent className="p-6 flex flex-col items-center">
                   <div className="relative mb-3">
                     <img
-                      src={`https://github.com/${topThreeCombined[1].githubUsername}.png?size=96`}
+                      src={getEntryAvatar(topThreeCombined[1].githubUsername, 96)}
                       alt={topThreeCombined[1].studentName}
                       className="w-16 h-16 rounded-full ring-2 ring-slate-400/60 object-cover"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -362,7 +369,7 @@ export const LeaderboardPage: React.FC = () => {
                 <CardContent className="p-6 flex flex-col items-center">
                   <div className="relative mb-3">
                     <img
-                      src={`https://github.com/${topThreeCombined[0].githubUsername}.png?size=96`}
+                      src={getEntryAvatar(topThreeCombined[0].githubUsername, 96)}
                       alt={topThreeCombined[0].studentName}
                       className="w-20 h-20 rounded-full ring-4 ring-amber-500/80 object-cover"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -387,7 +394,7 @@ export const LeaderboardPage: React.FC = () => {
                 <CardContent className="p-6 flex flex-col items-center">
                   <div className="relative mb-3">
                     <img
-                      src={`https://github.com/${topThreeCombined[2].githubUsername}.png?size=96`}
+                      src={getEntryAvatar(topThreeCombined[2].githubUsername, 96)}
                       alt={topThreeCombined[2].studentName}
                       className="w-16 h-16 rounded-full ring-2 ring-amber-700/60 object-cover"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -498,7 +505,7 @@ export const LeaderboardPage: React.FC = () => {
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-2.5">
                             <img
-                              src={`https://github.com/${entry.githubUsername}.png?size=48`}
+                              src={getEntryAvatar(entry.githubUsername, 48)}
                               alt={entry.studentName}
                               className="w-7 h-7 rounded-full ring-1 ring-border object-cover"
                               onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -599,7 +606,7 @@ export const LeaderboardPage: React.FC = () => {
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-2.5">
                             <img
-                              src={`https://github.com/${entry.githubUsername}.png?size=48`}
+                              src={getEntryAvatar(entry.githubUsername, 48)}
                               alt={entry.studentName}
                               className="w-7 h-7 rounded-full ring-1 ring-border object-cover"
                               onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -695,7 +702,7 @@ export const LeaderboardPage: React.FC = () => {
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-2.5">
                             <img
-                              src={`https://github.com/${entry.githubUsername}.png?size=48`}
+                              src={getEntryAvatar(entry.githubUsername, 48)}
                               alt={entry.studentName}
                               className="w-7 h-7 rounded-full ring-1 ring-border object-cover"
                               onError={(e) => { e.currentTarget.style.display = "none"; }}

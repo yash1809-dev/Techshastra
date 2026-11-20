@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
+import { getStudentByGithub } from "@/lib/studentStore";
+import { getStudentByUsername } from "@/lib/services/studentService";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   Code2,
@@ -12,6 +14,7 @@ import {
   ChevronRight,
   Menu,
   Github,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +32,55 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
   const { session, logout } = useStudentAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const [avatarUrl, setAvatarUrl] = useState<string>(() => {
+    if (session?.githubUsername) {
+      const cached = localStorage.getItem(`ts_avatar_${session.githubUsername}`);
+      if (cached) return cached;
+      const local = getStudentByGithub(session.githubUsername);
+      return local?.avatar || `https://github.com/${session.githubUsername}.png?size=64`;
+    }
+    return "";
+  });
+
+  useEffect(() => {
+    if (session?.githubUsername) {
+      const cached = localStorage.getItem(`ts_avatar_${session.githubUsername}`);
+      if (cached) setAvatarUrl(cached);
+
+      const local = getStudentByGithub(session.githubUsername);
+      if (local?.avatar) {
+        setAvatarUrl(local.avatar);
+        localStorage.setItem(`ts_avatar_${session.githubUsername}`, local.avatar);
+      }
+
+      getStudentByUsername(session.githubUsername)
+        .then((remote) => {
+          const remoteAvatar = (remote as any)?.avatar || (remote as any)?.avatar_url || (remote as any)?.profiles?.avatar_url;
+          if (remoteAvatar) {
+            setAvatarUrl(remoteAvatar);
+            localStorage.setItem(`ts_avatar_${session.githubUsername}`, remoteAvatar);
+          }
+        })
+        .catch(() => {});
+    }
+    const handler = (e: Event) => {
+      const { avatarUrl: newAvatar, studentId, githubUsername } =
+        (e as CustomEvent<{ avatarUrl: string; studentId?: string; githubUsername?: string }>).detail || {};
+      if (newAvatar && session?.githubUsername) {
+        const isMe =
+          (session.studentId && studentId && session.studentId === studentId) ||
+          (githubUsername && githubUsername.toLowerCase() === session.githubUsername.toLowerCase()) ||
+          (!studentId && !githubUsername);
+        if (isMe) {
+          setAvatarUrl(newAvatar);
+          localStorage.setItem(`ts_avatar_${session.githubUsername}`, newAvatar);
+        }
+      }
+    };
+    window.addEventListener("ts_avatar_updated", handler);
+    return () => window.removeEventListener("ts_avatar_updated", handler);
+  }, [session?.githubUsername]);
 
   const profileHref = session?.githubUsername
     ? `/members/${session.githubUsername}`
@@ -69,6 +121,13 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
       activeCheck: (path: string) => path.startsWith("/student/typing"),
       badge: "WPM",
     },
+    {
+      label: "Question Bank",
+      href: "/student/question-bank",
+      icon: BookOpen,
+      activeCheck: (path: string) => path.startsWith("/student/question-bank"),
+      badge: "Theory",
+    },
   ];
 
   const NavContent = ({ isMobile = false }: { isMobile?: boolean }) => (
@@ -88,18 +147,19 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
           title={collapsed && !isMobile ? `${session?.name} (@${session?.githubUsername})` : undefined}
         >
           {/* Avatar */}
-          {session?.githubUsername ? (
-            <img
-              src={`https://github.com/${session.githubUsername}.png?size=64`}
-              alt={session.name}
-              className="w-9 h-9 rounded-full ring-2 ring-primary/30 object-cover flex-shrink-0 group-hover:ring-primary/60 transition-all"
-              onError={(e) => { e.currentTarget.style.display = "none"; }}
-            />
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
+          <div className="relative w-9 h-9 rounded-full ring-2 ring-primary/30 overflow-hidden bg-primary/20 flex items-center justify-center flex-shrink-0 group-hover:ring-primary/60 transition-all">
+            <span className="text-sm font-bold text-primary select-none">
               {session?.name?.[0]?.toUpperCase() || "S"}
-            </div>
-          )}
+            </span>
+            {avatarUrl && (
+              <img
+                src={avatarUrl}
+                alt={session?.name || "Student"}
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            )}
+          </div>
 
           {(!collapsed || isMobile) && (
             <div className="flex-1 min-w-0">
@@ -211,18 +271,19 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
       {/* Mobile Top Header + Drawer Trigger */}
       <div className="md:hidden flex items-center justify-between px-4 py-2.5 bg-background/90 backdrop-blur-md sticky top-0 z-40" style={{ borderBottom: "1px solid hsl(var(--glass-border))" }}>
         <Link to={profileHref} className="flex items-center gap-2.5 min-w-0">
-          {session?.githubUsername ? (
-            <img
-              src={`https://github.com/${session.githubUsername}.png?size=64`}
-              alt={session.name}
-              className="w-7 h-7 rounded-full ring-2 ring-primary/30 object-cover flex-shrink-0"
-              onError={(e) => { e.currentTarget.style.display = "none"; }}
-            />
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs flex-shrink-0">
+          <div className="relative w-7 h-7 rounded-full ring-2 ring-primary/30 overflow-hidden bg-primary/20 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-bold text-primary select-none">
               {session?.name?.[0]?.toUpperCase() || "S"}
-            </div>
-          )}
+            </span>
+            {avatarUrl && (
+              <img
+                src={avatarUrl}
+                alt={session?.name || "Student"}
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            )}
+          </div>
           <div className="min-w-0">
             <span className="font-heading font-semibold text-xs tracking-wide text-foreground block truncate">
               {session?.name || "Student"}
@@ -305,6 +366,18 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
         >
           <Keyboard size={18} />
           <span>Typing</span>
+        </Link>
+
+        <Link
+          to="/student/question-bank"
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-medium transition-colors ${
+            location.pathname.startsWith("/student/question-bank")
+              ? "text-primary font-semibold"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <BookOpen size={18} />
+          <span>Q-Bank</span>
         </Link>
       </nav>
     </>

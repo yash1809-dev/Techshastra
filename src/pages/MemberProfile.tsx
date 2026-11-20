@@ -26,7 +26,7 @@ import {
   Github, Linkedin, MapPin, Building2, Globe, Star, GitFork,
   ExternalLink, FileText, Printer, Loader2, AlertTriangle,
   GraduationCap, Briefcase, Award, Code2, BookOpen, Edit3,
-  LogOut, ChevronRight, Copy, Check, Calendar, Users, RefreshCw, Eye, Plus,
+  LogOut, ChevronRight, Copy, Check, Calendar, Users, RefreshCw, Eye, EyeOff, Key, Plus, Crown, ShieldCheck,
 } from "lucide-react";
 import {
   getStudentByGithub, updateStudent,
@@ -39,9 +39,10 @@ import {
   langPercents, langColor, topRepos, clearGHCache,
   type GHUser, type GHRepo, type GHLanguageMap,
 } from "@/lib/githubApi";
-import { downloadLatex } from "@/lib/resumeExport";
 import { openResumePrintWindow, previewResume } from "@/components/ResumeDocument";
 import ResumeBuilderModal from "@/components/ResumeBuilderModal";
+import { RoleApplicationModal } from "@/components/RoleApplicationModal";
+import { getPromotedMembers, generateUniqueAdminKey, getOwnAdminKey, WING_METADATA, type PromotedMember } from "@/lib/services/hierarchyService";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import ContributionGraph from "@/components/ContributionGraph";
 import { buildAutoProfile, profileNeedsAutoFill } from "@/lib/autoProfile";
@@ -60,6 +61,40 @@ const StatPill = ({ label, value }: { label: string; value: number | string }) =
     <span className="text-[10px] uppercase tracking-widest text-foreground/50">{label}</span>
   </div>
 );
+
+
+const getDesignationBadge = (info: PromotedMember) => {
+  const wingLabel = info.wing ? WING_METADATA[info.wing]?.label || info.wing : null;
+
+  if (info.tier === 1) {
+    return {
+      icon: <Crown size={14} className="text-amber-500 shrink-0" />,
+      title: info.roleTitle,
+      subtitle: "Executive Board",
+      tag: "Tier 1",
+      containerClass: "bg-amber-500/10 text-amber-900 dark:text-amber-200 border-amber-500/40 shadow-xs",
+      pillClass: "bg-amber-500/20 text-amber-900 dark:text-amber-100 border-amber-500/30",
+    };
+  }
+  if (info.tier === 2) {
+    return {
+      icon: <Briefcase size={14} className="text-primary shrink-0" />,
+      title: wingLabel ? `${info.roleTitle} · ${wingLabel}` : info.roleTitle,
+      subtitle: "Functional Head",
+      tag: "Tier 2",
+      containerClass: "bg-primary/10 text-primary dark:text-primary-foreground border-primary/40 shadow-xs",
+      pillClass: "bg-primary/20 text-primary dark:text-primary-foreground border-primary/30",
+    };
+  }
+  return {
+    icon: <Users size={14} className="text-emerald-500 shrink-0" />,
+    title: wingLabel ? `Club Volunteer · ${wingLabel}` : "Club Volunteer",
+    subtitle: "Appointed Member",
+    tag: "Tier 3",
+    containerClass: "bg-emerald-500/10 text-emerald-950 dark:text-emerald-200 border-emerald-500/40 shadow-xs",
+    pillClass: "bg-emerald-500/20 text-emerald-900 dark:text-emerald-100 border-emerald-500/30",
+  };
+};
 
 const SectionTitle = ({ icon: Icon, title }: { icon: React.ElementType; title: string }) => (
   <div className="flex items-center gap-3 mb-4">
@@ -226,10 +261,39 @@ const MemberProfile = () => {
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [repoFilter, setRepoFilter] = useState<"top" | "all" | "starred">("top");
   const [resumeBuilderOpen, setResumeBuilderOpen] = useState(false);
-
+  const [applyModalOpen, setApplyModalOpen] = useState(false);
+  const [showAdminKey, setShowAdminKey] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+  // Key value is kept in React state only — read from vault, never from member blob
+  const [adminKeyValue, setAdminKeyValue] = useState<string | undefined>(undefined);
+  const [promotedInfo, setPromotedInfo] = useState<PromotedMember | null>(null);
 
   const isOwn = session?.githubUsername?.toLowerCase() === username?.toLowerCase();
   const profileUrl = `${window.location.origin}/members/${username}`;
+
+  // Check if this student is promoted in the hierarchy tree
+  useEffect(() => {
+    const checkPromotion = () => {
+      const list = getPromotedMembers();
+      const found = list.find(
+        (m) =>
+          (student?.id && m.studentId === student.id) ||
+          (username && m.githubUsername?.toLowerCase() === username.toLowerCase()) ||
+          (student?.name && m.name.toLowerCase() === student.name.toLowerCase())
+      );
+      setPromotedInfo(found || null);
+      // Load key from vault if one exists (own profile only)
+      if (found && found.hasAdminKey) {
+        const existingKey = getOwnAdminKey(found.studentId || found.githubUsername);
+        setAdminKeyValue(existingKey);
+      } else {
+        setAdminKeyValue(undefined);
+      }
+    };
+    checkPromotion();
+    window.addEventListener("ts_hierarchy_updated", checkPromotion);
+    return () => window.removeEventListener("ts_hierarchy_updated", checkPromotion);
+  }, [student, username]);
 
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -248,7 +312,7 @@ const MemberProfile = () => {
             ...remote,
             githubUsername: remote.github_username || remote.githubUsername,
             name: remote.name || remote.username,
-            avatar: remote.avatar || remote.avatar_url || (remote as any).profiles?.avatar_url,
+            avatar: (remote as any).avatar || (remote as any).avatar_url || (remote as any).profiles?.avatar_url,
             linkedinUrl: remote.linkedin_url || (remote as any).linkedinUrl,
             portfolioUrl: remote.portfolio_url || (remote as any).portfolioUrl,
             education: remote.education || [],
@@ -295,6 +359,26 @@ const MemberProfile = () => {
   }, [username]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Listen for avatar updates dispatched from MemberEdit after save
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { avatarUrl, studentId, githubUsername } =
+        (e as CustomEvent<{ avatarUrl: string; studentId?: string; githubUsername?: string }>).detail || {};
+      if (avatarUrl && (studentId || githubUsername)) {
+        setStudent((prev) => {
+          if (!prev) return prev;
+          const isMatch =
+            (studentId && (prev.id === studentId || (prev as any).studentId === studentId)) ||
+            (githubUsername && (prev.githubUsername || "").toLowerCase() === githubUsername.toLowerCase()) ||
+            (username && githubUsername && username.toLowerCase() === githubUsername.toLowerCase());
+          return isMatch ? { ...prev, avatar: avatarUrl } : prev;
+        });
+      }
+    };
+    window.addEventListener("ts_avatar_updated", handler);
+    return () => window.removeEventListener("ts_avatar_updated", handler);
+  }, [username]);
 
   // ── Error states ─────────────────────────────────────────────────────────
 
@@ -414,6 +498,15 @@ const MemberProfile = () => {
                 <h1 className="text-2xl xs:text-3xl font-heading font-light tracking-tight text-foreground leading-tight">
                   {student.name || ghUser?.name}
                 </h1>
+                {promotedInfo && (() => {
+                  const badge = getDesignationBadge(promotedInfo);
+                  return (
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-medium my-1 ${badge.containerClass}`}>
+                      {badge.icon}
+                      <span className="font-semibold truncate max-w-[170px]">{badge.title}</span>
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
                   <p className="text-foreground/50 font-light">@{student.githubUsername}</p>
                   <CopyLinkButton url={profileUrl} />
@@ -433,9 +526,23 @@ const MemberProfile = () => {
           <div className="flex-1 min-w-0 space-y-3 w-full">
             {/* Desktop-only Name + Username */}
             <motion.div variants={fadeUp} className="hidden md:block">
-              <h1 className="text-3xl md:text-5xl font-heading font-light tracking-tight text-foreground">
-                {ghUser?.name ?? student.name}
-              </h1>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-3xl md:text-5xl font-heading font-light tracking-tight text-foreground">
+                  {ghUser?.name ?? student.name}
+                </h1>
+                {promotedInfo && (() => {
+                  const badge = getDesignationBadge(promotedInfo);
+                  return (
+                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium ${badge.containerClass}`}>
+                      {badge.icon}
+                      <span className="font-semibold tracking-wide">{badge.title}</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full border border-current/20 opacity-90">
+                        {badge.tag}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <p className="text-foreground/50 font-light">@{student.githubUsername}</p>
                 <CopyLinkButton url={profileUrl} />
@@ -544,9 +651,9 @@ const MemberProfile = () => {
                   }}>
                   <RefreshCw size={13} /> Sync GitHub
                 </Button>
-                <Button size="sm" variant="outline" className="rounded-full gap-2 justify-center md:justify-start text-xs font-light"
-                  onClick={() => downloadLatex(student, ghUser, repos, langMap)}>
-                  <FileText size={13} /> LaTeX
+                <Button size="sm" className="rounded-full gap-2 justify-center md:justify-start text-xs font-medium bg-red-600 hover:bg-red-700 text-white shadow-sm border-0 transition-all duration-200"
+                  onClick={() => setApplyModalOpen(true)}>
+                  <Briefcase size={13} className="text-white" /> Apply for Role
                 </Button>
               </>
             )}
@@ -562,6 +669,89 @@ const MemberProfile = () => {
           <StatPill label="Following" value={ghUser?.following ?? 0} />
           {langs[0] && <StatPill label="Top Lang" value={langs[0].lang} />}
         </motion.div>
+
+        {/* ── ADMIN ACCESS CLEARANCE KEY (Promoted Tier 1 & Functional Heads) ── */}
+        {isOwn && promotedInfo && promotedInfo.tier <= 2 && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.22 }}
+            className="mb-8 p-5 sm:p-6 rounded-3xl glass border border-primary/30 bg-primary/[0.03] shadow-lg relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1.5 max-w-lg">
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-primary text-primary-foreground text-[10px] font-semibold px-2 py-0.5">
+                    {promotedInfo.roleTitle}
+                  </Badge>
+                  <span className="text-xs font-medium text-emerald-500 flex items-center gap-1">
+                    <Check size={12} /> Official Leadership Clearance (Tier {promotedInfo.tier})
+                  </span>
+                </div>
+                <h3 className="text-base font-heading font-medium text-foreground tracking-wide">
+                  Administrative Access Clearance
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  As an appointed {promotedInfo.roleTitle}, you possess administrative clearance.
+                  Use your registered name (<strong className="text-foreground">{promotedInfo.name}</strong>) and your secret access key to log into the Admin Panel at <code className="text-primary font-mono text-[11px]">/admin</code>.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                {!adminKeyValue ? (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      try {
+                        const key = generateUniqueAdminKey(promotedInfo.studentId || promotedInfo.githubUsername);
+                        toast({
+                          title: "Admin Access Key Generated! 🔑",
+                          description: "Keep your key secure. You will use your Name and this Key to access the Admin Panel.",
+                        });
+                        setAdminKeyValue(key);
+                      } catch (e: any) {
+                        toast({ title: "Key Generation Error", description: e.message, variant: "destructive" });
+                      }
+                    }}
+                    className="rounded-2xl text-xs h-9 px-5 bg-primary text-primary-foreground font-medium gap-2 shadow-sm shadow-primary/20 hover:bg-primary/90"
+                  >
+                    <Key size={14} /> Generate Access Key
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 p-2 rounded-2xl bg-card border border-border/80 shadow-inner">
+                    <div className="font-mono text-xs px-3 py-1 rounded-xl bg-background text-primary font-medium tracking-wider select-all">
+                      {showAdminKey ? adminKeyValue : "••••-••••-••••-••••"}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminKey(!showAdminKey)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      title={showAdminKey ? "Hide key" : "View key"}
+                    >
+                      {showAdminKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (adminKeyValue) {
+                          navigator.clipboard.writeText(adminKeyValue);
+                          setCopiedKey(true);
+                          toast({ title: "Copied to Clipboard ✓", description: "Admin access key copied." });
+                          setTimeout(() => setCopiedKey(false), 2000);
+                        }
+                      }}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      title="Copy Key"
+                    >
+                      {copiedKey ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* ── COMPLETENESS BANNER (own profile only) ───────────────────── */}
         {isOwn && completenessScore < 100 && (
@@ -812,18 +1002,25 @@ const MemberProfile = () => {
       </div>
 
       {student && (
-        <ResumeBuilderModal
-          open={resumeBuilderOpen}
-          onOpenChange={setResumeBuilderOpen}
-          student={student}
-          ghUser={ghUser}
-          repos={repos}
-          langMap={langMap}
-          onSaveToProfile={(updates) => {
-            const updated = updateStudent(student.id, updates);
-            if (updated) setStudent(updated);
-          }}
-        />
+        <>
+          <ResumeBuilderModal
+            open={resumeBuilderOpen}
+            onOpenChange={setResumeBuilderOpen}
+            student={student}
+            ghUser={ghUser}
+            repos={repos}
+            langMap={langMap}
+            onSaveToProfile={(updates) => {
+              const updated = updateStudent(student.id, updates);
+              if (updated) setStudent(updated);
+            }}
+          />
+          <RoleApplicationModal
+            open={applyModalOpen}
+            onClose={() => setApplyModalOpen(false)}
+            student={student}
+          />
+        </>
       )}
 
       <Footer />

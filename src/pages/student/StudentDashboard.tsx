@@ -6,10 +6,12 @@ import {
   getUserSubmissions,
   getLeaderboard,
   getTypingRecords,
+  enrichProblem,
   type Problem,
   type Submission,
   type LeaderboardEntry,
 } from "@/lib/codingStore";
+import { getPublishedProblems } from "@/lib/services/problemService";
 import {
   Code2,
   Terminal,
@@ -43,6 +45,11 @@ export const StudentDashboard: React.FC = () => {
   useEffect(() => {
     const pList = getProblemsCatalog();
     setProblems(pList);
+    getPublishedProblems().then((fresh) => {
+      if (fresh && fresh.length > 0) {
+        setProblems(fresh.map(enrichProblem));
+      }
+    });
 
     const currentStudentId = session?.studentId || session?.githubUsername;
     const sList = getUserSubmissions(currentStudentId);
