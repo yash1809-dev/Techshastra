@@ -65,10 +65,15 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
         .catch(() => {});
     }
     const handler = (e: Event) => {
-      const { avatarUrl: newAvatar } = (e as CustomEvent<{ avatarUrl: string }>).detail || {};
-      if (newAvatar) {
-        setAvatarUrl(newAvatar);
-        if (session?.githubUsername) {
+      const { avatarUrl: newAvatar, studentId, githubUsername } =
+        (e as CustomEvent<{ avatarUrl: string; studentId?: string; githubUsername?: string }>).detail || {};
+      if (newAvatar && session?.githubUsername) {
+        const isMe =
+          (session.studentId && studentId && session.studentId === studentId) ||
+          (githubUsername && githubUsername.toLowerCase() === session.githubUsername.toLowerCase()) ||
+          (!studentId && !githubUsername);
+        if (isMe) {
+          setAvatarUrl(newAvatar);
           localStorage.setItem(`ts_avatar_${session.githubUsername}`, newAvatar);
         }
       }

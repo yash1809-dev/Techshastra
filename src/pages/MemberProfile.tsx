@@ -363,14 +363,22 @@ const MemberProfile = () => {
   // Listen for avatar updates dispatched from MemberEdit after save
   useEffect(() => {
     const handler = (e: Event) => {
-      const { avatarUrl } = (e as CustomEvent<{ avatarUrl: string; studentId: string }>).detail;
-      if (avatarUrl) {
-        setStudent((prev) => prev ? { ...prev, avatar: avatarUrl } : prev);
+      const { avatarUrl, studentId, githubUsername } =
+        (e as CustomEvent<{ avatarUrl: string; studentId?: string; githubUsername?: string }>).detail || {};
+      if (avatarUrl && (studentId || githubUsername)) {
+        setStudent((prev) => {
+          if (!prev) return prev;
+          const isMatch =
+            (studentId && (prev.id === studentId || (prev as any).studentId === studentId)) ||
+            (githubUsername && (prev.githubUsername || "").toLowerCase() === githubUsername.toLowerCase()) ||
+            (username && githubUsername && username.toLowerCase() === githubUsername.toLowerCase());
+          return isMatch ? { ...prev, avatar: avatarUrl } : prev;
+        });
       }
     };
     window.addEventListener("ts_avatar_updated", handler);
     return () => window.removeEventListener("ts_avatar_updated", handler);
-  }, []);
+  }, [username]);
 
   // ── Error states ─────────────────────────────────────────────────────────
 

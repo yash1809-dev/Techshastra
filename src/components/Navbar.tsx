@@ -45,10 +45,15 @@ const Navbar = () => {
     }
 
     const handler = (e: Event) => {
-      const { avatarUrl: newAvatar } = (e as CustomEvent<{ avatarUrl: string }>).detail || {};
-      if (newAvatar) {
-        setNavAvatar(newAvatar);
-        if (studentSession?.githubUsername) {
+      const { avatarUrl: newAvatar, studentId, githubUsername } =
+        (e as CustomEvent<{ avatarUrl: string; studentId?: string; githubUsername?: string }>).detail || {};
+      if (newAvatar && studentSession?.githubUsername) {
+        const isMe =
+          (studentSession.studentId && studentId && studentSession.studentId === studentId) ||
+          (githubUsername && githubUsername.toLowerCase() === studentSession.githubUsername.toLowerCase()) ||
+          (!studentId && !githubUsername);
+        if (isMe) {
+          setNavAvatar(newAvatar);
           localStorage.setItem(`ts_avatar_${studentSession.githubUsername}`, newAvatar);
         }
       }

@@ -234,16 +234,6 @@ const Members = () => {
         }
         const merged = Array.from(map.values());
         setAllStudents(merged);
-        if (session?.githubUsername) {
-          const me = merged.find((m: any) =>
-            (m.githubUsername || m.username || "").toLowerCase() === session.githubUsername.toLowerCase()
-          );
-          const myAvatar = me?.avatar || me?.avatar_url || me?.profiles?.avatar_url;
-          if (myAvatar) {
-            localStorage.setItem(`ts_avatar_${session.githubUsername}`, myAvatar);
-            window.dispatchEvent(new CustomEvent("ts_avatar_updated", { detail: { avatarUrl: myAvatar } }));
-          }
-        }
       } catch (_e) {
         const local = getLocalStudents().filter((s) => s.is_active);
         setAllStudents(local);
@@ -257,10 +247,15 @@ const Members = () => {
     loadHierarchy();
 
     const avatarHandler = (e: Event) => {
-      const { avatarUrl, studentId } = (e as CustomEvent<{ avatarUrl: string; studentId: string }>).detail || {};
-      if (avatarUrl) {
+      const { avatarUrl, studentId, githubUsername } =
+        (e as CustomEvent<{ avatarUrl: string; studentId?: string; githubUsername?: string }>).detail || {};
+      if (avatarUrl && (studentId || githubUsername)) {
         setAllStudents((prev) =>
-          prev.map((s) => (s.id === studentId || s.studentId === studentId ? { ...s, avatar: avatarUrl } : s))
+          prev.map((s) => {
+            const idMatch = studentId && (s.id === studentId || s.studentId === studentId);
+            const ghMatch = githubUsername && (s.githubUsername || s.username || "").toLowerCase() === githubUsername.toLowerCase();
+            return idMatch || ghMatch ? { ...s, avatar: avatarUrl } : s;
+          })
         );
       }
     };

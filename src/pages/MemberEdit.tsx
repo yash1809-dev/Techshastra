@@ -504,7 +504,7 @@ const MemberEdit = () => {
     if (avatar) {
       window.dispatchEvent(
         new CustomEvent("ts_avatar_updated", {
-          detail: { avatarUrl: avatar, studentId: student.id },
+          detail: { avatarUrl: avatar, studentId: student.id, githubUsername: student.githubUsername },
         })
       );
     }
