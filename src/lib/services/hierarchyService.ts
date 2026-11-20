@@ -69,7 +69,7 @@ export const ROLE_DEFINITIONS: Record<HierarchyRole, RoleDefinition> = {
     tier: 1,
     eligibleYears: ["3rd Year", "4th Year"],
     requiresWing: false,
-    isOpenForApplication: false, // Locked as per user requirement
+    isOpenForApplication: true, // Opened for 3rd & 4th year applicants
     description: "Overall leadership, external representation, and strategic direction of TechShastra.",
   },
   vice_president: {
@@ -85,25 +85,25 @@ export const ROLE_DEFINITIONS: Record<HierarchyRole, RoleDefinition> = {
     id: "general_secretary",
     title: "General Secretary",
     tier: 1,
-    eligibleYears: ["2nd Year", "3rd Year", "4th Year"],
+    eligibleYears: ["3rd Year", "4th Year"],
     requiresWing: false,
-    isOpenForApplication: false, // Locked as per user requirement
+    isOpenForApplication: true, // Opened for 3rd & 4th year applicants
     description: "Documentation, governance, administrative coordination, and records.",
   },
   treasurer: {
     id: "treasurer",
     title: "Treasurer",
     tier: 1,
-    eligibleYears: ["2nd Year", "3rd Year", "4th Year"],
+    eligibleYears: ["3rd Year", "4th Year"],
     requiresWing: false,
-    isOpenForApplication: false, // Locked as per user requirement
+    isOpenForApplication: true, // Opened for 3rd & 4th year applicants
     description: "Budgeting, financial accounts, allocations, and sponsorship management.",
   },
   functional_head: {
     id: "functional_head",
     title: "Functional Head",
     tier: 2,
-    eligibleYears: ["2nd Year", "3rd Year"],
+    eligibleYears: ["2nd Year", "3rd Year", "4th Year"],
     requiresWing: true,
     isOpenForApplication: true,
     description: "Lead departmental operations, project deliverables, and team leadership.",
@@ -112,7 +112,7 @@ export const ROLE_DEFINITIONS: Record<HierarchyRole, RoleDefinition> = {
     id: "functional_co_head",
     title: "Functional Co-Head",
     tier: 2,
-    eligibleYears: ["2nd Year", "3rd Year"],
+    eligibleYears: ["2nd Year", "3rd Year", "4th Year"],
     requiresWing: true,
     isOpenForApplication: true,
     description: "Support department head and coordinate volunteer execution.",
@@ -121,7 +121,7 @@ export const ROLE_DEFINITIONS: Record<HierarchyRole, RoleDefinition> = {
     id: "volunteer",
     title: "Club Volunteer / Team Member",
     tier: 3,
-    eligibleYears: ["1st Year", "2nd Year"],
+    eligibleYears: ["1st Year", "2nd Year", "3rd Year", "4th Year"], // Open for all students under any wing
     requiresWing: true,
     isOpenForApplication: true,
     description: "Hands-on contribution within wings, event support, and domain exploration.",
@@ -248,6 +248,18 @@ export const getRoleApplications = (): RoleApplication[] => {
 export const submitRoleApplication = async (
   appData: Omit<RoleApplication, "id" | "status" | "created_at">
 ): Promise<RoleApplication> => {
+  // Prevent applying for an already occupied role
+  if (appData.appliedRole !== "volunteer") {
+    const check = isRoleOccupied(appData.appliedRole, appData.appliedWing);
+    if (check.occupied) {
+      throw new Error(
+        `The position of ${ROLE_DEFINITIONS[appData.appliedRole].title}${
+          appData.appliedWing ? ` (${WING_METADATA[appData.appliedWing]?.label || appData.appliedWing})` : ""
+        } is already filled by an appointed member. It will reopen if the position becomes vacant.`
+      );
+    }
+  }
+
   const newApp: RoleApplication = {
     ...appData,
     id: `app_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -339,6 +351,39 @@ export const savePromotedMembers = (members: PromotedMember[]): void => {
     localStorage.setItem(PROMOTED_MEMBERS_KEY, JSON.stringify(members));
     window.dispatchEvent(new CustomEvent("ts_hierarchy_updated"));
   } catch {}
+};
+
+/**
+ * Checks whether a role (and optional wing) is currently filled by an appointed member.
+ * When a role is occupied, applicants cannot select it until the position opens again.
+ * Volunteer role is never occupied and remains open for all years under any wing.
+ */
+export const isRoleOccupied = (
+  role: HierarchyRole,
+  wing?: FunctionalWing
+): { occupied: boolean; holder?: PromotedMember } => {
+  if (role === "volunteer") {
+    return { occupied: false };
+  }
+
+  const promoted = getPromotedMembers();
+
+  if (role === "president" || role === "vice_president" || role === "general_secretary" || role === "treasurer") {
+    const holder = promoted.find((m) => m.role === role);
+    return { occupied: !!holder, holder };
+  }
+
+  if (role === "functional_head" || role === "functional_co_head") {
+    if (!wing) {
+      const wings: FunctionalWing[] = ["logistics_events", "design_web", "technical", "content_social", "community"];
+      const allFilled = wings.every((w) => promoted.some((m) => m.role === role && m.wing === w));
+      return { occupied: allFilled };
+    }
+    const holder = promoted.find((m) => m.role === role && m.wing === wing);
+    return { occupied: !!holder, holder };
+  }
+
+  return { occupied: false };
 };
 
 /**
