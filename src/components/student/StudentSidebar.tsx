@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { getStudentByGithub } from "@/lib/studentStore";
+import { getStudentByUsername } from "@/lib/services/studentService";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   Code2,
@@ -34,6 +35,8 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
 
   const [avatarUrl, setAvatarUrl] = useState<string>(() => {
     if (session?.githubUsername) {
+      const cached = localStorage.getItem(`ts_avatar_${session.githubUsername}`);
+      if (cached) return cached;
       const local = getStudentByGithub(session.githubUsername);
       return local?.avatar || `https://github.com/${session.githubUsername}.png?size=64`;
     }
@@ -42,12 +45,33 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
 
   useEffect(() => {
     if (session?.githubUsername) {
+      const cached = localStorage.getItem(`ts_avatar_${session.githubUsername}`);
+      if (cached) setAvatarUrl(cached);
+
       const local = getStudentByGithub(session.githubUsername);
-      if (local?.avatar) setAvatarUrl(local.avatar);
+      if (local?.avatar) {
+        setAvatarUrl(local.avatar);
+        localStorage.setItem(`ts_avatar_${session.githubUsername}`, local.avatar);
+      }
+
+      getStudentByUsername(session.githubUsername)
+        .then((remote) => {
+          const remoteAvatar = (remote as any)?.avatar || (remote as any)?.avatar_url || (remote as any)?.profiles?.avatar_url;
+          if (remoteAvatar) {
+            setAvatarUrl(remoteAvatar);
+            localStorage.setItem(`ts_avatar_${session.githubUsername}`, remoteAvatar);
+          }
+        })
+        .catch(() => {});
     }
     const handler = (e: Event) => {
       const { avatarUrl: newAvatar } = (e as CustomEvent<{ avatarUrl: string }>).detail || {};
-      if (newAvatar) setAvatarUrl(newAvatar);
+      if (newAvatar) {
+        setAvatarUrl(newAvatar);
+        if (session?.githubUsername) {
+          localStorage.setItem(`ts_avatar_${session.githubUsername}`, newAvatar);
+        }
+      }
     };
     window.addEventListener("ts_avatar_updated", handler);
     return () => window.removeEventListener("ts_avatar_updated", handler);
@@ -118,18 +142,19 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
           title={collapsed && !isMobile ? `${session?.name} (@${session?.githubUsername})` : undefined}
         >
           {/* Avatar */}
-          {avatarUrl || session?.githubUsername ? (
-            <img
-              src={avatarUrl || `https://github.com/${session?.githubUsername}.png?size=64`}
-              alt={session?.name || "Student"}
-              className="w-9 h-9 rounded-full ring-2 ring-primary/30 object-cover flex-shrink-0 group-hover:ring-primary/60 transition-all"
-              onError={(e) => { e.currentTarget.style.display = "none"; }}
-            />
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
+          <div className="relative w-9 h-9 rounded-full ring-2 ring-primary/30 overflow-hidden bg-primary/20 flex items-center justify-center flex-shrink-0 group-hover:ring-primary/60 transition-all">
+            <span className="text-sm font-bold text-primary select-none">
               {session?.name?.[0]?.toUpperCase() || "S"}
-            </div>
-          )}
+            </span>
+            {avatarUrl && (
+              <img
+                src={avatarUrl}
+                alt={session?.name || "Student"}
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            )}
+          </div>
 
           {(!collapsed || isMobile) && (
             <div className="flex-1 min-w-0">
@@ -241,18 +266,19 @@ export const StudentSidebar: React.FC<SidebarProps> = ({
       {/* Mobile Top Header + Drawer Trigger */}
       <div className="md:hidden flex items-center justify-between px-4 py-2.5 bg-background/90 backdrop-blur-md sticky top-0 z-40" style={{ borderBottom: "1px solid hsl(var(--glass-border))" }}>
         <Link to={profileHref} className="flex items-center gap-2.5 min-w-0">
-          {avatarUrl || session?.githubUsername ? (
-            <img
-              src={avatarUrl || `https://github.com/${session?.githubUsername}.png?size=64`}
-              alt={session?.name || "Student"}
-              className="w-7 h-7 rounded-full ring-2 ring-primary/30 object-cover flex-shrink-0"
-              onError={(e) => { e.currentTarget.style.display = "none"; }}
-            />
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs flex-shrink-0">
+          <div className="relative w-7 h-7 rounded-full ring-2 ring-primary/30 overflow-hidden bg-primary/20 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-bold text-primary select-none">
               {session?.name?.[0]?.toUpperCase() || "S"}
-            </div>
-          )}
+            </span>
+            {avatarUrl && (
+              <img
+                src={avatarUrl}
+                alt={session?.name || "Student"}
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            )}
+          </div>
           <div className="min-w-0">
             <span className="font-heading font-semibold text-xs tracking-wide text-foreground block truncate">
               {session?.name || "Student"}

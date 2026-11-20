@@ -64,19 +64,19 @@ const MemberCard = ({ student, promotedMember }: { student: any; promotedMember?
         <div className="glass rounded-3xl p-6 hover:bg-primary/5 transition-all duration-300 group cursor-pointer h-full flex flex-col gap-4 border border-border/60 hover:border-primary/40 shadow-sm">
           {/* Avatar + name */}
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl overflow-hidden ring-2 ring-primary/20 flex-shrink-0 bg-primary/10 flex items-center justify-center font-heading text-primary font-bold text-lg">
+            <div className="relative w-14 h-14 rounded-2xl overflow-hidden ring-2 ring-primary/20 flex-shrink-0 bg-primary/10 flex items-center justify-center font-heading text-primary font-bold text-lg select-none">
+              <span>{displayName[0]?.toUpperCase() || "M"}</span>
               {avatarSrc ? (
                 <img
                   src={avatarSrc}
                   alt={displayName}
-                  className="w-full h-full object-cover"
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   loading="lazy"
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).style.display = "none";
                   }}
                 />
               ) : null}
-              <span>{displayName[0]?.toUpperCase() || "M"}</span>
             </div>
             <div className="min-w-0">
               <p className="font-heading font-medium tracking-wide text-foreground group-hover:text-primary transition-colors truncate">
@@ -232,7 +232,18 @@ const Members = () => {
           const key = (s.githubUsername || s.email || s.id).toLowerCase();
           map.set(key, s);
         }
-        setAllStudents(Array.from(map.values()));
+        const merged = Array.from(map.values());
+        setAllStudents(merged);
+        if (session?.githubUsername) {
+          const me = merged.find((m: any) =>
+            (m.githubUsername || m.username || "").toLowerCase() === session.githubUsername.toLowerCase()
+          );
+          const myAvatar = me?.avatar || me?.avatar_url || me?.profiles?.avatar_url;
+          if (myAvatar) {
+            localStorage.setItem(`ts_avatar_${session.githubUsername}`, myAvatar);
+            window.dispatchEvent(new CustomEvent("ts_avatar_updated", { detail: { avatarUrl: myAvatar } }));
+          }
+        }
       } catch (_e) {
         const local = getLocalStudents().filter((s) => s.is_active);
         setAllStudents(local);

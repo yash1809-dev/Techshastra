@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { getStudentByGithub } from "@/lib/studentStore";
+import { getStudentByUsername } from "@/lib/services/studentService";
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -13,6 +14,8 @@ const Navbar = () => {
   const { session: studentSession, logout } = useStudentAuth();
   const [navAvatar, setNavAvatar] = useState<string>(() => {
     if (studentSession?.githubUsername) {
+      const cached = localStorage.getItem(`ts_avatar_${studentSession.githubUsername}`);
+      if (cached) return cached;
       const local = getStudentByGithub(studentSession.githubUsername);
       return local?.avatar || `https://github.com/${studentSession.githubUsername}.png?size=64`;
     }
@@ -21,12 +24,34 @@ const Navbar = () => {
 
   useEffect(() => {
     if (studentSession?.githubUsername) {
+      const cached = localStorage.getItem(`ts_avatar_${studentSession.githubUsername}`);
+      if (cached) setNavAvatar(cached);
+
       const local = getStudentByGithub(studentSession.githubUsername);
-      if (local?.avatar) setNavAvatar(local.avatar);
+      if (local?.avatar) {
+        setNavAvatar(local.avatar);
+        localStorage.setItem(`ts_avatar_${studentSession.githubUsername}`, local.avatar);
+      }
+
+      getStudentByUsername(studentSession.githubUsername)
+        .then((remote) => {
+          const remoteAvatar = (remote as any)?.avatar || (remote as any)?.avatar_url || (remote as any)?.profiles?.avatar_url;
+          if (remoteAvatar) {
+            setNavAvatar(remoteAvatar);
+            localStorage.setItem(`ts_avatar_${studentSession.githubUsername}`, remoteAvatar);
+          }
+        })
+        .catch(() => {});
     }
+
     const handler = (e: Event) => {
       const { avatarUrl: newAvatar } = (e as CustomEvent<{ avatarUrl: string }>).detail || {};
-      if (newAvatar) setNavAvatar(newAvatar);
+      if (newAvatar) {
+        setNavAvatar(newAvatar);
+        if (studentSession?.githubUsername) {
+          localStorage.setItem(`ts_avatar_${studentSession.githubUsername}`, newAvatar);
+        }
+      }
     };
     window.addEventListener("ts_avatar_updated", handler);
     return () => window.removeEventListener("ts_avatar_updated", handler);
@@ -126,18 +151,20 @@ const Navbar = () => {
                   <Link to={`/members/${studentSession.githubUsername}`}
                     className="flex items-center gap-2 text-sm font-light tracking-wider text-foreground/70 hover:text-foreground transition-colors duration-300 group"
                     title={`View profile (@${studentSession.githubUsername})`}>
-                    <img
-                      src={navAvatar || `https://github.com/${studentSession.githubUsername}.png?size=64`}
-                      alt={studentSession.name}
-                      className="w-7 h-7 rounded-full ring-2 ring-primary/30 object-cover group-hover:ring-primary transition-all"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        const fallback = e.currentTarget.parentElement?.querySelector('.avatar-fallback');
-                        if (fallback) (fallback as HTMLElement).style.display = 'flex';
-                      }}
-                    />
-                    <div className="avatar-fallback w-7 h-7 rounded-full ring-2 ring-primary/30 bg-primary/20 hidden items-center justify-center text-[10px] font-heading font-medium text-primary">
-                      {studentSession.name ? studentSession.name[0].toUpperCase() : 'U'}
+                    <div className="relative w-7 h-7 rounded-full ring-2 ring-primary/30 overflow-hidden bg-primary/20 flex items-center justify-center group-hover:ring-primary transition-all">
+                      <span className="text-[10px] font-heading font-medium text-primary select-none">
+                        {studentSession.name ? studentSession.name[0].toUpperCase() : 'U'}
+                      </span>
+                      {navAvatar ? (
+                        <img
+                          src={navAvatar}
+                          alt={studentSession.name}
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : null}
                     </div>
                   </Link>
                 ) : null}
@@ -249,12 +276,19 @@ const Navbar = () => {
                       {studentSession.githubUsername ? (
                         <Link to={`/members/${studentSession.githubUsername}`} onClick={() => setIsMobileMenuOpen(false)}>
                           <Button size="lg" variant="outline" className="w-full rounded-full font-light tracking-widest gap-2">
-                            <img
-                              src={navAvatar || `https://github.com/${studentSession.githubUsername}.png?size=48`}
-                              className="w-5 h-5 rounded-full object-cover"
-                              alt=""
-                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                            />
+                            <div className="relative w-5 h-5 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center shrink-0">
+                              <span className="text-[9px] font-bold text-primary">
+                                {studentSession.name ? studentSession.name[0].toUpperCase() : 'U'}
+                              </span>
+                              {navAvatar ? (
+                                <img
+                                  src={navAvatar}
+                                  className="absolute inset-0 w-full h-full object-cover"
+                                  alt=""
+                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              ) : null}
+                            </div>
                             My Profile
                           </Button>
                         </Link>
