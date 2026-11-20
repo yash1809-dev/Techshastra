@@ -40,6 +40,8 @@ import { getAllStudents as getRemoteStudents } from "@/lib/services/studentServi
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import {
   getStructuredHierarchy,
+  getPromotedMembers,
+  WING_METADATA,
   type StructuredHierarchy,
   type PromotedMember,
   type FunctionalWing,
@@ -48,12 +50,13 @@ import {
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
 const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
-const MemberCard = ({ student }: { student: any }) => {
+const MemberCard = ({ student, promotedMember }: { student: any; promotedMember?: PromotedMember }) => {
   const ghUser = student.githubUsername || student.github_username || student.username;
   const displayName = student.name || student.username || "Member";
   const avatarSrc =
     student.avatar || student.avatar_url || student.profiles?.avatar_url || (ghUser ? `https://avatars.githubusercontent.com/${ghUser}?s=80` : "");
   const interestsList = student.interests || [];
+  const wingLabel = promotedMember?.wing ? WING_METADATA[promotedMember.wing]?.label || promotedMember.wing : null;
 
   return (
     <motion.div variants={fadeUp}>
@@ -82,6 +85,32 @@ const MemberCard = ({ student }: { student: any }) => {
               <p className="text-xs text-foreground/40 font-light truncate">@{ghUser}</p>
             </div>
           </div>
+
+          {/* Official Designation Badge if promoted */}
+          {promotedMember && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span
+                className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${
+                  promotedMember.tier === 1
+                    ? "bg-amber-500/10 text-amber-800 dark:text-amber-200 border-amber-500/30"
+                    : promotedMember.tier === 2
+                    ? "bg-primary/10 text-primary dark:text-primary-foreground border-primary/30"
+                    : "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200 border-emerald-500/30"
+                }`}
+              >
+                {promotedMember.tier === 1 ? (
+                  <Crown size={11} className="text-amber-500 shrink-0" />
+                ) : promotedMember.tier === 2 ? (
+                  <Briefcase size={11} className="text-primary shrink-0" />
+                ) : (
+                  <Users size={11} className="text-emerald-500 shrink-0" />
+                )}
+                <span className="truncate">
+                  {promotedMember.roleTitle}{wingLabel ? ` · ${wingLabel}` : ""}
+                </span>
+              </span>
+            </div>
+          )}
 
           {/* Course / year */}
           {(student.course || student.year) && (
@@ -239,6 +268,18 @@ const Members = () => {
     allStudents.forEach((s) => (s.interests || []).forEach((i: string) => set.add(i)));
     return Array.from(set).sort();
   }, [allStudents]);
+
+  // Lookup map for fast promoted member resolution on member cards
+  const promotedMap = useMemo(() => {
+    const map = new Map<string, PromotedMember>();
+    const all = getPromotedMembers();
+    for (const m of all) {
+      if (m.studentId) map.set(m.studentId.toLowerCase(), m);
+      if (m.githubUsername) map.set(m.githubUsername.toLowerCase(), m);
+      if (m.name) map.set(m.name.toLowerCase(), m);
+    }
+    return map;
+  }, [hierarchy]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -580,9 +621,13 @@ const Members = () => {
               </div>
             ) : (
               <motion.div variants={stagger} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filtered.map((s) => (
-                  <MemberCard key={s.id} student={s} />
-                ))}
+                {filtered.map((s) => {
+                  const gh = (s.githubUsername || s.github_username || s.username || "").toLowerCase();
+                  const sId = (s.id || "").toLowerCase();
+                  const sNm = (s.name || "").toLowerCase();
+                  const pMember = promotedMap.get(sId) || promotedMap.get(gh) || promotedMap.get(sNm);
+                  return <MemberCard key={s.id} student={s} promotedMember={pMember} />;
+                })}
               </motion.div>
             )}
           </div>

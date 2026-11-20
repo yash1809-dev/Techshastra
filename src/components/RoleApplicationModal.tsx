@@ -447,7 +447,6 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <Users size={13} className="text-emerald-500" /> Tier 3: Volunteers & Team Members (All Years)
                 </label>
-                <span className="text-[10px] text-emerald-500 font-medium">● Always Open for All</span>
               </div>
               <div>
                 {renderRoleButton(

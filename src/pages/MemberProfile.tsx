@@ -26,7 +26,7 @@ import {
   Github, Linkedin, MapPin, Building2, Globe, Star, GitFork,
   ExternalLink, FileText, Printer, Loader2, AlertTriangle,
   GraduationCap, Briefcase, Award, Code2, BookOpen, Edit3,
-  LogOut, ChevronRight, Copy, Check, Calendar, Users, RefreshCw, Eye, EyeOff, Key, Plus,
+  LogOut, ChevronRight, Copy, Check, Calendar, Users, RefreshCw, Eye, EyeOff, Key, Plus, Crown, ShieldCheck,
 } from "lucide-react";
 import {
   getStudentByGithub, updateStudent,
@@ -42,7 +42,7 @@ import {
 import { openResumePrintWindow, previewResume } from "@/components/ResumeDocument";
 import ResumeBuilderModal from "@/components/ResumeBuilderModal";
 import { RoleApplicationModal } from "@/components/RoleApplicationModal";
-import { getPromotedMembers, generateUniqueAdminKey, getOwnAdminKey, type PromotedMember } from "@/lib/services/hierarchyService";
+import { getPromotedMembers, generateUniqueAdminKey, getOwnAdminKey, WING_METADATA, type PromotedMember } from "@/lib/services/hierarchyService";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import ContributionGraph from "@/components/ContributionGraph";
 import { buildAutoProfile, profileNeedsAutoFill } from "@/lib/autoProfile";
@@ -61,6 +61,40 @@ const StatPill = ({ label, value }: { label: string; value: number | string }) =
     <span className="text-[10px] uppercase tracking-widest text-foreground/50">{label}</span>
   </div>
 );
+
+
+const getDesignationBadge = (info: PromotedMember) => {
+  const wingLabel = info.wing ? WING_METADATA[info.wing]?.label || info.wing : null;
+
+  if (info.tier === 1) {
+    return {
+      icon: <Crown size={14} className="text-amber-500 shrink-0" />,
+      title: info.roleTitle,
+      subtitle: "Executive Board",
+      tag: "Tier 1",
+      containerClass: "bg-amber-500/10 text-amber-900 dark:text-amber-200 border-amber-500/40 shadow-xs",
+      pillClass: "bg-amber-500/20 text-amber-900 dark:text-amber-100 border-amber-500/30",
+    };
+  }
+  if (info.tier === 2) {
+    return {
+      icon: <Briefcase size={14} className="text-primary shrink-0" />,
+      title: wingLabel ? `${info.roleTitle} · ${wingLabel}` : info.roleTitle,
+      subtitle: "Functional Head",
+      tag: "Tier 2",
+      containerClass: "bg-primary/10 text-primary dark:text-primary-foreground border-primary/40 shadow-xs",
+      pillClass: "bg-primary/20 text-primary dark:text-primary-foreground border-primary/30",
+    };
+  }
+  return {
+    icon: <Users size={14} className="text-emerald-500 shrink-0" />,
+    title: wingLabel ? `Club Volunteer · ${wingLabel}` : "Club Volunteer",
+    subtitle: "Appointed Member",
+    tag: "Tier 3",
+    containerClass: "bg-emerald-500/10 text-emerald-950 dark:text-emerald-200 border-emerald-500/40 shadow-xs",
+    pillClass: "bg-emerald-500/20 text-emerald-900 dark:text-emerald-100 border-emerald-500/30",
+  };
+};
 
 const SectionTitle = ({ icon: Icon, title }: { icon: React.ElementType; title: string }) => (
   <div className="flex items-center gap-3 mb-4">
@@ -278,7 +312,7 @@ const MemberProfile = () => {
             ...remote,
             githubUsername: remote.github_username || remote.githubUsername,
             name: remote.name || remote.username,
-            avatar: remote.avatar || remote.avatar_url || (remote as any).profiles?.avatar_url,
+            avatar: (remote as any).avatar || (remote as any).avatar_url || (remote as any).profiles?.avatar_url,
             linkedinUrl: remote.linkedin_url || (remote as any).linkedinUrl,
             portfolioUrl: remote.portfolio_url || (remote as any).portfolioUrl,
             education: remote.education || [],
@@ -456,6 +490,15 @@ const MemberProfile = () => {
                 <h1 className="text-2xl xs:text-3xl font-heading font-light tracking-tight text-foreground leading-tight">
                   {student.name || ghUser?.name}
                 </h1>
+                {promotedInfo && (() => {
+                  const badge = getDesignationBadge(promotedInfo);
+                  return (
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[11px] font-medium my-1 ${badge.containerClass}`}>
+                      {badge.icon}
+                      <span className="font-semibold truncate max-w-[170px]">{badge.title}</span>
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
                   <p className="text-foreground/50 font-light">@{student.githubUsername}</p>
                   <CopyLinkButton url={profileUrl} />
@@ -475,9 +518,23 @@ const MemberProfile = () => {
           <div className="flex-1 min-w-0 space-y-3 w-full">
             {/* Desktop-only Name + Username */}
             <motion.div variants={fadeUp} className="hidden md:block">
-              <h1 className="text-3xl md:text-5xl font-heading font-light tracking-tight text-foreground">
-                {ghUser?.name ?? student.name}
-              </h1>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-3xl md:text-5xl font-heading font-light tracking-tight text-foreground">
+                  {ghUser?.name ?? student.name}
+                </h1>
+                {promotedInfo && (() => {
+                  const badge = getDesignationBadge(promotedInfo);
+                  return (
+                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium ${badge.containerClass}`}>
+                      {badge.icon}
+                      <span className="font-semibold tracking-wide">{badge.title}</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full border border-current/20 opacity-90">
+                        {badge.tag}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <p className="text-foreground/50 font-light">@{student.githubUsername}</p>
                 <CopyLinkButton url={profileUrl} />

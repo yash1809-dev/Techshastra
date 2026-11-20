@@ -66,8 +66,8 @@ export const supabase: any = createClient<any>(safeUrl, safeKey, {
     detectSessionInUrl: true,
   },
   global: {
-    fetch: (url, options = {}) => {
-      const headers = new Headers(options.headers || {});
+    fetch: (url, options: any = {}) => {
+      const headers = new Headers(options?.headers || {});
       if (typeof window !== 'undefined') {
         const token = sessionStorage.getItem('ts_admin_token');
         if (token && !headers.has('x-admin-token')) {

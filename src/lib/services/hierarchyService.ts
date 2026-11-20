@@ -547,14 +547,13 @@ export const generateUniqueAdminKey = (identifier: string): string => {
 
   // Sync with Admin Credentials store for legacy verify_admin_login fallback
   try {
-    const adminRole: AdminRole = member.tier === 1 ? "super_admin" : "admin";
-    createAdminCredential({
-      name: member.name.trim(),
-      mobile: key,
-      dob: "2000-01-01",
-      email: member.email,
-      role: adminRole,
-    });
+    createAdminCredential(
+      member.name.trim(),
+      key,
+      "2000-01-01",
+      "member",
+      member.email
+    );
   } catch {}
 
   return key;

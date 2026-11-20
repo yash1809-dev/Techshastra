@@ -328,7 +328,7 @@ export const ProblemsList: React.FC = () => {
                 }`}
               >
                 <span>{yr === "All" ? "All Years" : yr}</span>
-                {isStudentYr && yr !== "All" && (
+                {isStudentYr && (yr as string) !== "All" && (
                   <span className="text-[9px] px-1 py-0 rounded bg-purple-500/20 text-purple-900 dark:text-purple-200 uppercase font-bold">You</span>
                 )}
               </button>

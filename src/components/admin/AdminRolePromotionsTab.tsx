@@ -604,11 +604,11 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
                     {m.tier <= 2 && (
                       <div className="p-2 rounded-xl bg-background/50 border border-border/40 flex items-center justify-between text-[11px]">
                         <span className="text-muted-foreground flex items-center gap-1">
-                          <ShieldCheck size={12} className={m.adminKey ? "text-emerald-500" : "text-muted-foreground"} />
+                          <ShieldCheck size={12} className={m.hasAdminKey ? "text-emerald-500" : "text-muted-foreground"} />
                           Admin Clearance:
                         </span>
-                        <span className={`font-mono font-medium ${m.adminKey ? "text-emerald-500" : "text-amber-500"}`}>
-                          {m.adminKey ? "Key Generated" : "Pending User Activation"}
+                        <span className={`font-mono font-medium ${m.hasAdminKey ? "text-emerald-500" : "text-amber-500"}`}>
+                          {m.hasAdminKey ? "Key Generated" : "Pending User Activation"}
                         </span>
                       </div>
                     )}

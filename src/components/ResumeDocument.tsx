@@ -53,8 +53,8 @@ export interface ResumeData {
     role: string;
     company: string;
     startDate: string;
-    endDate: string;
-    description: string;
+    endDate?: string;
+    description?: string;
   }>;
   projects: ResumeProjectItem[];
   certifications: Array<{

@@ -366,7 +366,7 @@ const MemberEdit = () => {
             ...remote,
             githubUsername: remote.github_username || remote.githubUsername,
             name: remote.name || remote.username,
-            avatar: remote.avatar || remote.avatar_url || (remote as any).profiles?.avatar_url,
+            avatar: (remote as any).avatar || (remote as any).avatar_url || (remote as any).profiles?.avatar_url,
             linkedinUrl: remote.linkedin_url || (remote as any).linkedinUrl,
             portfolioUrl: remote.portfolio_url || (remote as any).portfolioUrl,
             education: remote.education || [],

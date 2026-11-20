@@ -237,7 +237,7 @@ export default function ResumeBuilderModal({
   };
 
   const handlePrint = () => {
-    printResumeData(data, data.templateId);
+    printResumeData(data);
   };
 
   const previewHtml = generateResumeHTML(data, data.templateId);

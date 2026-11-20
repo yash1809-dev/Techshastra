@@ -1499,7 +1499,7 @@ const Admin = ({ userRole }: AdminProps) => {
                 <TabsTrigger value="academic-questions" className="shrink-0 text-xs py-2 px-3 rounded-xl"><BookOpen className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Academic Question Bank</TabsTrigger>
               </>
             )}
-            {(isSuperAdmin || canPromoteRoles(currentAdminRole, currentAdminName || currentUserName)) && (
+            {(isSuperAdmin || canPromoteRoles(userRole, currentUserName)) && (
               <TabsTrigger value="promotions" className="shrink-0 text-xs py-2 px-3 rounded-xl bg-amber-500/10 text-amber-500 font-medium relative">
                 <Crown className="w-3.5 h-3.5 mr-1.5" />Leadership & Promotions
               </TabsTrigger>
@@ -2677,7 +2677,7 @@ const Admin = ({ userRole }: AdminProps) => {
           {/* ── Leadership & Role Promotions ── */}
           <TabsContent value="promotions">
             <AdminRolePromotionsTab
-              currentAdminName={currentUserName || currentAdminName}
+              currentAdminName={currentUserName}
               isSuperAdmin={isSuperAdmin}
             />
           </TabsContent>
