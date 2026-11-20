@@ -46,6 +46,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import {
   getRoleApplications,
+  fetchRoleApplicationsRemote,
   getPromotedMembers,
   promoteStudent,
   demoteMember,
@@ -86,9 +87,15 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
   const [confirmWing, setConfirmWing] = useState<FunctionalWing>("technical");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const loadData = () => {
+  const loadData = async () => {
     setApplications(getRoleApplications());
     setPromotedMembers(getPromotedMembers());
+    try {
+      const merged = await fetchRoleApplicationsRemote();
+      if (merged && merged.length > 0) {
+        setApplications(merged);
+      }
+    } catch (_e) {}
   };
 
   useEffect(() => {
@@ -328,7 +335,10 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
                 className="h-8 text-xs rounded-lg border border-border bg-card/80 px-2 text-foreground cursor-pointer"
               >
                 <option value="All">All Roles</option>
+                <option value="president">President (Tier 1)</option>
                 <option value="vice_president">Vice President</option>
+                <option value="general_secretary">General Secretary</option>
+                <option value="treasurer">Treasurer</option>
                 <option value="functional_head">Functional Head</option>
                 <option value="functional_co_head">Functional Co-Head</option>
                 <option value="volunteer">Volunteer</option>
@@ -655,11 +665,13 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
                 onChange={(e) => setConfirmRole(e.target.value as HierarchyRole)}
                 className="w-full h-9 text-xs rounded-xl border border-border bg-card px-3 text-foreground cursor-pointer"
               >
+                <option value="president">President (Tier 1 Executive)</option>
                 <option value="vice_president">Vice President (Tier 1 Core)</option>
+                <option value="general_secretary">General Secretary (Tier 1 Core)</option>
+                <option value="treasurer">Treasurer (Tier 1 Core)</option>
                 <option value="functional_head">Functional Head (Tier 2)</option>
                 <option value="functional_co_head">Functional Co-Head (Tier 2)</option>
                 <option value="volunteer">Volunteer / Team Member (Tier 3)</option>
-                {isSuperAdmin && <option value="president">President (Tier 1 Executive)</option>}
               </select>
             </div>
 

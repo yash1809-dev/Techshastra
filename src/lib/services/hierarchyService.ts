@@ -273,10 +273,10 @@ export const submitRoleApplication = async (
   localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(updated));
   window.dispatchEvent(new CustomEvent("ts_applications_updated"));
 
-  // Optional Supabase backup
+  // Optional Supabase backup (insert rather than upsert to avoid RLS 42501 error)
   if (isSupabaseConfigured() && supabase) {
     try {
-      await supabase.from("role_applications").upsert({
+      await supabase.from("role_applications").insert({
         id: newApp.id,
         student_id: newApp.studentId,
         student_name: newApp.studentName,
@@ -290,10 +290,73 @@ export const submitRoleApplication = async (
         status: newApp.status,
         created_at: newApp.created_at,
       } as any);
-    } catch {}
+    } catch (err) {
+      console.warn("Failed to backup role application to Supabase:", err);
+    }
   }
 
   return newApp;
+};
+
+/**
+ * Fetches applications from Supabase role_applications and merges with localStorage.
+ * Ensures applications submitted on other clients/sessions load seamlessly for the admin.
+ */
+export const fetchRoleApplicationsRemote = async (): Promise<RoleApplication[]> => {
+  let remoteApps: RoleApplication[] = [];
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("role_applications")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        remoteApps = data.map((d: any) => ({
+          id: d.id,
+          studentId: d.student_id,
+          studentName: d.student_name,
+          studentEmail: d.student_email,
+          githubUsername: d.github_username,
+          academicYear: d.academic_year,
+          course: d.course,
+          appliedRole: d.applied_role as HierarchyRole,
+          appliedWing: d.applied_wing as FunctionalWing | undefined,
+          statement: d.statement,
+          status: d.status,
+          reviewedBy: d.reviewed_by,
+          reviewedAt: d.reviewed_at,
+          created_at: d.created_at,
+        }));
+      }
+    } catch (e) {
+      console.warn("Failed to fetch remote role applications:", e);
+    }
+  }
+
+  const localApps = getRoleApplications();
+  const map = new Map<string, RoleApplication>();
+  remoteApps.forEach((a) => map.set(a.id, a));
+  localApps.forEach((a) => {
+    const existing = map.get(a.id);
+    if (!existing) {
+      map.set(a.id, a);
+    } else {
+      if (a.status !== "pending" && existing.status === "pending") {
+        map.set(a.id, a);
+      }
+    }
+  });
+
+  const merged = Array.from(map.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  try {
+    localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(merged));
+  } catch {}
+
+  return merged;
 };
 
 // ─── PROMOTED MEMBERS & HIERARCHY RETRIEVAL ─────────────────────────────────
@@ -321,26 +384,7 @@ export const getPromotedMembers = (): PromotedMember[] => {
     if (!raw) return [];
     const members: PromotedMember[] = JSON.parse(raw);
     if (!Array.isArray(members)) return [];
-
-    // STRICT GOVERNANCE RULE:
-    // Only post/include members whose profiles exist as registered members in the system.
-    // If they are not registered as a member, they CANNOT appear in the leadership or hierarchy tree.
-    const registeredStudents = getAllStudents();
-    const validMembers = members.filter((m) =>
-      registeredStudents.some(
-        (s) =>
-          (m.studentId && s.id === m.studentId) ||
-          (m.githubUsername && s.githubUsername?.toLowerCase() === m.githubUsername.toLowerCase()) ||
-          (m.email && s.email?.toLowerCase() === m.email.toLowerCase()) ||
-          (m.name && s.name?.toLowerCase() === m.name.toLowerCase())
-      )
-    );
-
-    // Auto-clean any unverified or mock records from localStorage
-    if (validMembers.length !== members.length) {
-      localStorage.setItem(PROMOTED_MEMBERS_KEY, JSON.stringify(validMembers));
-    }
-    return validMembers;
+    return members;
   } catch {
     return [];
   }

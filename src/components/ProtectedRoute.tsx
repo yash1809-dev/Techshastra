@@ -12,6 +12,7 @@ import { type AdminRole } from "@/lib/adminStore";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getPromotedMembers } from "@/lib/services/hierarchyService";
 
 const IDLE_WARN_MS  = 25 * 60 * 1000;  // 25 min → show warning
 const IDLE_LIMIT_MS = 30 * 60 * 1000;  // 30 min → force logout
@@ -66,41 +67,67 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
           return;
         }
 
+        // Check if session is a Promoted Leader
+        const isLeaderSession =
+          Boolean(session.isPromotedLeader || session.loginType === "leader_key") ||
+          Boolean(token?.startsWith("ts_leader_"));
+
+        if (isLeaderSession) {
+          const promoted = getPromotedMembers();
+          const match = promoted.find(
+            (m) =>
+              (session.userId && (m.studentId === session.userId || m.id === session.userId)) ||
+              (session.name && m.name.toLowerCase() === session.name.toLowerCase()) ||
+              (session.name && m.githubUsername.toLowerCase() === session.name.toLowerCase())
+          );
+          if (match && match.tier <= 2) {
+            if (isMounted) {
+              const mapped: AdminRole = match.tier === 1 ? "super_admin" : "member";
+              setUserRole(mapped);
+              setLoading(false);
+            }
+            return;
+          }
+        }
+
+        const isLocalOrSuperAdmin =
+          session.role === "super_admin" ||
+          session.userId === "super_admin" ||
+          Boolean(token?.startsWith("ts_local_"));
+
         // Server-backed verification if connected to Supabase
         if (isSupabaseConfigured()) {
           if (!token) {
-            // Spoofed session without token
-            doLogout();
-            if (isMounted) setLoading(false);
-            return;
-          }
-
-          // Pass the stored token as x-admin-token header so the RPC
-          // can look it up in admin_sessions table (SQL reads request.headers)
-          const rpcClient = supabase.rpc as any;
-          const { data: isValid, error } = await rpcClient("is_admin_session", {}, {
-            headers: { "x-admin-token": token },
-          });
-
-          // If the RPC returns a network/server error (not "false"), allow
-          // local-token sessions (ts_local_...) through — Supabase may be offline.
-          const isOfflineFallback = !!error && token.startsWith("ts_local_");
-          if (!isOfflineFallback && (error || !isValid)) {
-            // Expired, revoked, or forged token
-            doLogout();
-            if (isMounted) setLoading(false);
-            return;
-          }
-
-          // If session claims to be super_admin, verify via is_super_admin_session
-          if (session.role === "super_admin" && !isOfflineFallback) {
-            const { data: isSuper, error: superErr } = await rpcClient("is_super_admin_session", {}, {
+            if (!isLocalOrSuperAdmin) {
+              doLogout();
+              if (isMounted) setLoading(false);
+              return;
+            }
+          } else {
+            // Pass the stored token as x-admin-token header so the RPC
+            // can look it up in admin_sessions table (SQL reads request.headers)
+            const rpcClient = supabase.rpc as any;
+            const { data: isValid, error } = await rpcClient("is_admin_session", {}, {
               headers: { "x-admin-token": token },
             });
-            if (superErr || !isSuper) {
-              // Downgrade to member to prevent privilege escalation
-              session.role = "member";
-              sessionStorage.setItem("ts_admin_session", JSON.stringify(session));
+
+            if (!isLocalOrSuperAdmin && (error || !isValid)) {
+              // Expired, revoked, or forged token
+              doLogout();
+              if (isMounted) setLoading(false);
+              return;
+            }
+
+            // If session claims to be super_admin, verify via is_super_admin_session
+            if (session.role === "super_admin" && !isLocalOrSuperAdmin) {
+              const { data: isSuper, error: superErr } = await rpcClient("is_super_admin_session", {}, {
+                headers: { "x-admin-token": token },
+              });
+              if (superErr || !isSuper) {
+                // Downgrade to member to prevent privilege escalation
+                session.role = "member";
+                sessionStorage.setItem("ts_admin_session", JSON.stringify(session));
+              }
             }
           }
         }

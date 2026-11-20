@@ -85,9 +85,11 @@ export default function Auth() {
       const hierarchyAuth = verifyAdminKeyLogin(sName, sKey);
       if (hierarchyAuth.success && hierarchyAuth.member) {
         const member = hierarchyAuth.member;
-        const mappedRole: AdminRole = member.tier === 1 ? "super_admin" : "admin";
+        const mappedRole: AdminRole = member.tier === 1 ? "super_admin" : "member";
+        const leaderToken = `ts_leader_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-        // Write the session object first (token will be set by registerAdminSession below)
+        // Guarantee token is set in sessionStorage immediately
+        sessionStorage.setItem("ts_admin_token", leaderToken);
         sessionStorage.setItem(
           "ts_admin_session",
           JSON.stringify({
@@ -95,19 +97,22 @@ export default function Auth() {
             role: mappedRole,
             name: member.name,
             department: member.wing || "Leadership",
+            isPromotedLeader: true,
+            loginType: "leader_key",
             authenticated_at: new Date().toISOString(),
           })
         );
 
-        // registerAdminSession stores its own sess_... token in Supabase admin_sessions
-        // and also writes it to sessionStorage as ts_admin_token — so the ProtectedRoute
-        // RPC call receives the correct x-admin-token header value.
-        await registerAdminSession(member.name, member.studentId, mappedRole).catch(() => {
-          // Supabase not configured or offline — fall back to a local-only token
-          // so the ProtectedRoute sessionStorage-only path still works.
-          const fallbackToken = `ts_local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-          sessionStorage.setItem("ts_admin_token", fallbackToken);
-        });
+        // Try registering in backend if available
+        try {
+          const registered = await registerAdminSession(member.name, member.studentId, mappedRole);
+          if (!registered) {
+            sessionStorage.setItem("ts_admin_token", leaderToken);
+          }
+        } catch {
+          sessionStorage.setItem("ts_admin_token", leaderToken);
+        }
+
         logAdminAction(
           member.studentId,
           member.name,
@@ -127,8 +132,10 @@ export default function Auth() {
 
       // ── 2. CHECK SUPER ADMIN CREDENTIALS ──
       const superAdminResult = await verifySuperAdmin(sName, sKey, "2000-01-01");
-      if (superAdminResult.success || sName.toLowerCase() === "super admin" && sKey === "1234567890") {
+      if (superAdminResult.success || (sName.toLowerCase() === "super admin" && sKey === "1234567890")) {
         const activeName = superAdminResult.name || sName;
+        const fallbackToken = `ts_local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        
         sessionStorage.setItem(
           "ts_admin_session",
           JSON.stringify({
@@ -138,10 +145,17 @@ export default function Auth() {
             authenticated_at: new Date().toISOString(),
           })
         );
-        await registerAdminSession(activeName, null, "super_admin").catch(() => {
-          const fallbackToken = `ts_local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-          sessionStorage.setItem("ts_admin_token", fallbackToken);
-        });
+        
+        try {
+          const reg = await registerAdminSession(activeName, null, "super_admin");
+          if (!reg && !sessionStorage.getItem("ts_admin_token")) {
+            sessionStorage.setItem("ts_admin_token", fallbackToken);
+          }
+        } catch {
+          if (!sessionStorage.getItem("ts_admin_token")) {
+            sessionStorage.setItem("ts_admin_token", fallbackToken);
+          }
+        }
         toast({
           title: "Super Admin Authenticated ✓",
           description: `Welcome, ${activeName}.`,

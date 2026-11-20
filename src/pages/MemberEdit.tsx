@@ -417,11 +417,6 @@ const MemberEdit = () => {
     // 3. Sync Supabase backend
     if (isSupabaseConfigured()) {
       try {
-        await supabase
-          .from("student_profiles")
-          .update({ avatar_url: newAvatarUrl || null } as any)
-          .eq("id", student.id);
-
         const { data: authData } = await supabase.auth.getUser();
         const targetUserId = authData?.user?.id || (student as any).user_id || session?.studentId;
         if (targetUserId) {

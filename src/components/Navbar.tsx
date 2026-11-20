@@ -25,12 +25,13 @@ const Navbar = () => {
   useEffect(() => {
     if (studentSession?.githubUsername) {
       const cached = localStorage.getItem(`ts_avatar_${studentSession.githubUsername}`);
-      if (cached) setNavAvatar(cached);
-
-      const local = getStudentByGithub(studentSession.githubUsername);
-      if (local?.avatar) {
-        setNavAvatar(local.avatar);
-        localStorage.setItem(`ts_avatar_${studentSession.githubUsername}`, local.avatar);
+      if (cached) {
+        setNavAvatar(cached);
+      } else {
+        const local = getStudentByGithub(studentSession.githubUsername);
+        if (local?.avatar) {
+          setNavAvatar(local.avatar);
+        }
       }
 
       getStudentByUsername(studentSession.githubUsername)
