@@ -51,6 +51,7 @@ import {
   fetchPromotedMembersRemote,
   promoteStudent,
   demoteMember,
+  rejectRoleApplication,
   ROLE_DEFINITIONS,
   WING_METADATA,
   type RoleApplication,
@@ -90,20 +91,17 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
   const [isProcessing, setIsProcessing] = useState(false);
 
   const loadData = async () => {
-    setApplications(getRoleApplications());
-    setPromotedMembers(getPromotedMembers());
     try {
       const [mergedApps, remotePromoted] = await Promise.all([
         fetchRoleApplicationsRemote(),
         fetchPromotedMembersRemote(),
       ]);
-      if (mergedApps && mergedApps.length > 0) {
-        setApplications(mergedApps);
-      }
-      if (remotePromoted && remotePromoted.length > 0) {
-        setPromotedMembers(remotePromoted);
-      }
-    } catch (_e) {}
+      setApplications(mergedApps || []);
+      setPromotedMembers(remotePromoted || []);
+    } catch (_e) {
+      setApplications(getRoleApplications());
+      setPromotedMembers(getPromotedMembers());
+    }
   };
 
   useEffect(() => {
@@ -214,32 +212,60 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
     }
   };
 
-  const handleRejectApplication = (appId: string, studentName: string) => {
-    const raw = getRoleApplications();
-    const updated = raw.map((a) =>
-      a.id === appId
-        ? { ...a, status: "rejected" as const, reviewedBy: currentAdminName, reviewedAt: new Date().toISOString() }
-        : a
+  const handleRejectApplication = async (appId: string, studentName: string) => {
+    // Optimistically update UI
+    setApplications((prev) =>
+      prev.map((a) =>
+        a.id === appId
+          ? { ...a, status: "rejected" as const, reviewedBy: currentAdminName, reviewedAt: new Date().toISOString() }
+          : a
+      )
     );
-    localStorage.setItem("ts_role_applications", JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent("ts_applications_updated"));
-    toast({
-      title: "Application Declined",
-      description: `Application for ${studentName} was marked as declined.`,
-    });
-    loadData();
+    try {
+      await rejectRoleApplication(appId, currentAdminName);
+      toast({
+        title: "Application Declined",
+        description: `Application for ${studentName} was declined. The student may now apply for another role.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error Declining",
+        description: err.message || "Failed to decline application",
+        variant: "destructive",
+      });
+    }
+    await loadData();
   };
 
-  const handleDemote = async (identifier: string, name: string) => {
-    if (!confirm(`Are you sure you want to demote ${name}? Their administrative credentials and keys will be immediately revoked.`)) {
+  const handleDemote = async (member: PromotedMember) => {
+    if (!confirm(`Are you sure you want to demote ${member.name}? Their administrative credentials and keys will be immediately revoked.`)) {
       return;
     }
-    await demoteMember(identifier, currentAdminName);
-    toast({
-      title: "Member Demoted",
-      description: `${name} has been removed from official leadership and their admin keys were revoked.`,
-    });
-    loadData();
+    // Optimistically remove from state immediately
+    const targetKeys = new Set(
+      [member.id, member.studentId, member.githubUsername].filter(Boolean).map((k) => k!.toLowerCase())
+    );
+    setPromotedMembers((prev) =>
+      prev.filter((m) => {
+        const mKeys = [m.id, m.studentId, m.githubUsername].filter(Boolean).map((k) => k.toLowerCase());
+        return !mKeys.some((k) => targetKeys.has(k));
+      })
+    );
+
+    try {
+      await demoteMember(member.id || member.studentId || member.githubUsername, currentAdminName, member);
+      toast({
+        title: "Member Demoted",
+        description: `${member.name} has been removed from official leadership and their admin keys were revoked.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Demotion Error",
+        description: err.message || "Failed to demote member",
+        variant: "destructive",
+      });
+    }
+    await loadData();
   };
 
   const wingIcons: Record<FunctionalWing, any> = {
@@ -655,7 +681,7 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleDemote(m.studentId, m.name)}
+                        onClick={() => handleDemote(m)}
                         className="h-7 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive px-2 rounded-lg gap-1"
                       >
                         <Trash2 size={12} /> Demote Member

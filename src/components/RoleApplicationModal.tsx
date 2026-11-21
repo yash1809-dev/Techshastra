@@ -34,6 +34,7 @@ import {
   HeartHandshake,
   Crown,
   Lock,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,8 +47,10 @@ import {
   type HierarchyRole,
   type FunctionalWing,
   type PromotedMember,
+  type RoleApplication,
   submitRoleApplication,
   getPromotedMembers,
+  getUserApplicationStatus,
 } from "@/lib/services/hierarchyService";
 
 interface Props {
@@ -62,6 +65,15 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
   // Real-time promoted members state
   const [promotedMembers, setPromotedMembers] = useState<PromotedMember[]>([]);
 
+  // User's active application & leadership status
+  const [statusInfo, setStatusInfo] = useState<{
+    activeApp: RoleApplication | null;
+    rejectedApp: RoleApplication | null;
+    isLeader: boolean;
+    leaderRole?: string;
+  } | null>(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState<boolean>(true);
+
   useEffect(() => {
     const load = () => {
       setPromotedMembers(getPromotedMembers());
@@ -70,6 +82,25 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
     window.addEventListener("ts_hierarchy_updated", load);
     return () => window.removeEventListener("ts_hierarchy_updated", load);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    let isMounted = true;
+    setIsLoadingStatus(true);
+    getUserApplicationStatus({
+      studentId: student?.id,
+      githubUsername: student?.githubUsername || student?.username,
+      email: student?.email,
+    }).then((res) => {
+      if (isMounted) {
+        setStatusInfo(res);
+        setIsLoadingStatus(false);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [open, student]);
 
   // Normalize student academic year
   const studentYear = useMemo(() => {
@@ -393,11 +424,79 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
           </button>
         </div>
 
-        {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 sm:px-8 py-5 sm:py-6 space-y-6">
-          
-          {/* Eligibility Notice Banner */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-primary/5 border border-primary/20 flex items-start gap-3">
+        {/* Dynamic Modal Content based on application standing */}
+        {isLoadingStatus ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-3">
+            <Loader2 size={32} className="animate-spin text-primary" />
+            <p className="text-xs text-muted-foreground">Checking application eligibility & status...</p>
+          </div>
+        ) : statusInfo?.isLeader ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 sm:p-12 text-center space-y-4">
+            <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shadow-sm">
+              <Crown size={32} />
+            </div>
+            <div className="space-y-1.5 max-w-md">
+              <Badge variant="outline" className="border-amber-500/30 text-amber-500 bg-amber-500/10 text-xs px-3 py-0.5">
+                Official Leadership Member
+              </Badge>
+              <h3 className="font-heading font-medium text-lg text-foreground">
+                Appointed as {statusInfo.leaderRole}
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                You are already an active appointed member of the TechShastra leadership team. Current leadership members cannot submit new role applications.
+              </p>
+            </div>
+            <Button onClick={onClose} className="rounded-xl text-xs h-9 px-6 bg-primary text-primary-foreground font-medium">
+              Close Window
+            </Button>
+          </div>
+        ) : statusInfo?.activeApp ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 sm:p-12 text-center space-y-5">
+            <div className="w-16 h-16 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
+              <Briefcase size={32} />
+            </div>
+            <div className="space-y-2 max-w-md">
+              <Badge variant="outline" className="border-primary/40 text-primary bg-primary/10 text-xs px-3 py-0.5">
+                Application Under Review
+              </Badge>
+              <h3 className="font-heading font-medium text-lg text-foreground">
+                Applied for {ROLE_DEFINITIONS[statusInfo.activeApp.appliedRole]?.title || statusInfo.activeApp.appliedRole}
+                {statusInfo.activeApp.appliedWing ? ` · ${WING_METADATA[statusInfo.activeApp.appliedWing]?.label || statusInfo.activeApp.appliedWing}` : ""}
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Your application submitted on{" "}
+                <strong className="text-foreground">{new Date(statusInfo.activeApp.created_at).toLocaleDateString()}</strong> is currently under review by the Super Admin and President.
+              </p>
+              <div className="p-3.5 rounded-2xl bg-muted/30 border border-border/60 text-left text-xs text-foreground/80 space-y-1 mt-3">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Your Submitted Statement
+                </span>
+                <p className="italic text-muted-foreground line-clamp-3">"{statusInfo.activeApp.statement}"</p>
+              </div>
+              <p className="text-[11px] text-amber-500/90 pt-1">
+                To prevent role spamming, students can only hold one active application at a time. If this application is declined, you will immediately be eligible to apply for another role.
+              </p>
+            </div>
+            <Button onClick={onClose} className="rounded-xl text-xs h-9 px-6 bg-primary text-primary-foreground font-medium">
+              Close Window
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 sm:px-8 py-5 sm:py-6 space-y-6">
+            
+            {/* Previous declined notice if user was rejected and can reapply */}
+            {statusInfo?.rejectedApp && (
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+                <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                <div className="text-xs leading-relaxed text-foreground/80">
+                  <strong className="text-amber-500 font-medium">Notice:</strong> Your previous application for{" "}
+                  <strong>{ROLE_DEFINITIONS[statusInfo.rejectedApp.appliedRole]?.title || statusInfo.rejectedApp.appliedRole}</strong> was declined. You are eligible to submit a fresh application for any open position below.
+                </div>
+              </div>
+            )}
+
+            {/* Eligibility Notice Banner */}
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-primary/5 border border-primary/20 flex items-start gap-3">
             <Sparkles size={18} className="text-primary shrink-0 mt-0.5" />
             <div className="text-xs leading-relaxed text-foreground/80">
               {isFirstYear ? (
@@ -624,6 +723,7 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
             </Button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

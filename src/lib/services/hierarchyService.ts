@@ -246,9 +246,187 @@ export const getRoleApplications = (): RoleApplication[] => {
   }
 };
 
+/**
+ * Checks a user's active application and leadership standing.
+ * Ensures cross-platform single-application integrity:
+ * - If user is already an active appointed leader, returns isLeader = true.
+ * - If user has an existing application with status = "pending", returns activeApp.
+ * - If user's latest application was "rejected", returns rejectedApp (eligible to reapply).
+ */
+export const getUserApplicationStatus = async (user: {
+  studentId?: string;
+  githubUsername?: string;
+  email?: string;
+}): Promise<{
+  activeApp: RoleApplication | null;
+  rejectedApp: RoleApplication | null;
+  isLeader: boolean;
+  leaderRole?: string;
+}> => {
+  const sId = user.studentId?.trim();
+  const gh = user.githubUsername?.trim().toLowerCase();
+  const em = user.email?.trim().toLowerCase();
+
+  // 1. Check if user is already an active appointed leader
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      const orConditions: string[] = [];
+      if (sId) orConditions.push(`student_id.eq.${sId}`, `id.eq.${sId}`);
+      if (gh) orConditions.push(`github_username.ilike.${gh}`);
+      if (em) orConditions.push(`email.ilike.${em}`);
+
+      if (orConditions.length > 0) {
+        const { data: leaderData } = await (supabase
+          .from("promoted_members" as any)
+          .select("role_title, role")
+          .eq("is_active", true)
+          .or(orConditions.join(","))
+          .maybeSingle() as any);
+
+        if (leaderData) {
+          return {
+            activeApp: null,
+            rejectedApp: null,
+            isLeader: true,
+            leaderRole: leaderData.role_title || leaderData.role,
+          };
+        }
+      }
+    } catch (_err) {}
+  }
+
+  // Fallback to local promoted members check
+  const localPromoted = getPromotedMembers();
+  const localLeader = localPromoted.find((m) => {
+    return (
+      (sId && (m.studentId === sId || m.id === sId)) ||
+      (gh && m.githubUsername.toLowerCase() === gh) ||
+      (em && m.email?.toLowerCase() === em)
+    );
+  });
+  if (localLeader) {
+    return {
+      activeApp: null,
+      rejectedApp: null,
+      isLeader: true,
+      leaderRole: localLeader.roleTitle || localLeader.role,
+    };
+  }
+
+  // 2. Check user's role applications (Supabase is single source of truth)
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      const orConditions: string[] = [];
+      if (sId) orConditions.push(`student_id.eq.${sId}`);
+      if (gh) orConditions.push(`github_username.ilike.${gh}`);
+      if (em) orConditions.push(`student_email.ilike.${em}`);
+
+      if (orConditions.length > 0) {
+        const { data, error } = await (supabase
+          .from("role_applications" as any)
+          .select("*")
+          .or(orConditions.join(","))
+          .order("created_at", { ascending: false }) as any);
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const pending = data.find((d: any) => d.status === "pending");
+          if (pending) {
+            return {
+              activeApp: {
+                id: pending.id,
+                studentId: pending.student_id,
+                studentName: pending.student_name,
+                studentEmail: pending.student_email,
+                githubUsername: pending.github_username,
+                academicYear: pending.academic_year,
+                course: pending.course,
+                appliedRole: pending.applied_role as HierarchyRole,
+                appliedWing: pending.applied_wing as FunctionalWing | undefined,
+                statement: pending.statement,
+                status: pending.status,
+                reviewedBy: pending.reviewed_by,
+                reviewedAt: pending.reviewed_at,
+                created_at: pending.created_at,
+              },
+              rejectedApp: null,
+              isLeader: false,
+            };
+          }
+
+          const rejected = data.find((d: any) => d.status === "rejected");
+          if (rejected) {
+            return {
+              activeApp: null,
+              rejectedApp: {
+                id: rejected.id,
+                studentId: rejected.student_id,
+                studentName: rejected.student_name,
+                studentEmail: rejected.student_email,
+                githubUsername: rejected.github_username,
+                academicYear: rejected.academic_year,
+                course: rejected.course,
+                appliedRole: rejected.applied_role as HierarchyRole,
+                appliedWing: rejected.applied_wing as FunctionalWing | undefined,
+                statement: rejected.statement,
+                status: rejected.status,
+                reviewedBy: rejected.reviewed_by,
+                reviewedAt: rejected.reviewed_at,
+                created_at: rejected.created_at,
+              },
+              isLeader: false,
+            };
+          }
+        }
+      }
+    } catch (_appErr) {}
+  }
+
+  // Fallback to local applications
+  const localApps = getRoleApplications();
+  const userApps = localApps.filter((a) => {
+    return (
+      (sId && a.studentId === sId) ||
+      (gh && a.githubUsername.toLowerCase() === gh) ||
+      (em && a.studentEmail?.toLowerCase() === em)
+    );
+  });
+
+  const pending = userApps.find((a) => a.status === "pending");
+  if (pending) {
+    return { activeApp: pending, rejectedApp: null, isLeader: false };
+  }
+
+  const rejected = userApps.find((a) => a.status === "rejected");
+  if (rejected) {
+    return { activeApp: null, rejectedApp: rejected, isLeader: false };
+  }
+
+  return { activeApp: null, rejectedApp: null, isLeader: false };
+};
+
 export const submitRoleApplication = async (
   appData: Omit<RoleApplication, "id" | "status" | "created_at">
 ): Promise<RoleApplication> => {
+  // STRICT RULE: Check if user already has an active application or is an appointed leader
+  const status = await getUserApplicationStatus({
+    studentId: appData.studentId,
+    githubUsername: appData.githubUsername,
+    email: appData.studentEmail,
+  });
+
+  if (status.isLeader) {
+    throw new Error(
+      `You are already officially appointed as ${status.leaderRole}. Current leadership team members cannot submit new role applications.`
+    );
+  }
+
+  if (status.activeApp) {
+    const activeRoleTitle = ROLE_DEFINITIONS[status.activeApp.appliedRole]?.title || status.activeApp.appliedRole;
+    throw new Error(
+      `You already have an active application under review for "${activeRoleTitle}". To prevent duplicate submissions and role spamming, students can only hold one active application at a time. You may only apply again if your earlier application is rejected.`
+    );
+  }
+
   // Prevent applying for an already occupied role
   if (appData.appliedRole !== "volunteer") {
     const check = isRoleOccupied(appData.appliedRole, appData.appliedWing);
@@ -268,16 +446,10 @@ export const submitRoleApplication = async (
     created_at: new Date().toISOString(),
   };
 
-  const apps = getRoleApplications();
-  // Filter out any previous pending app by this student for this role
-  const updated = [newApp, ...apps.filter((a) => !(a.studentId === appData.studentId && a.status === "pending"))];
-  localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(updated));
-  window.dispatchEvent(new CustomEvent("ts_applications_updated"));
-
-  // Optional Supabase backup (insert rather than upsert to avoid RLS 42501 error)
+  // Supabase is the primary store for applications
   if (isSupabaseConfigured() && supabase) {
     try {
-      await supabase.from("role_applications").insert({
+      const { error } = await supabase.from("role_applications").insert({
         id: newApp.id,
         student_id: newApp.studentId,
         student_name: newApp.studentName,
@@ -291,17 +463,62 @@ export const submitRoleApplication = async (
         status: newApp.status,
         created_at: newApp.created_at,
       } as any);
+
+      if (error) {
+        console.error("Failed to insert role application to Supabase:", error);
+      }
     } catch (err) {
-      console.warn("Failed to backup role application to Supabase:", err);
+      console.warn("Exception inserting role application to Supabase:", err);
     }
   }
+
+  // Update local cache
+  const apps = getRoleApplications();
+  const updated = [newApp, ...apps.filter((a) => !(a.studentId === appData.studentId && a.status === "pending"))];
+  localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent("ts_applications_updated"));
 
   return newApp;
 };
 
 /**
- * Fetches applications from Supabase role_applications and merges with localStorage.
- * Ensures applications submitted on other clients/sessions load seamlessly for the admin.
+ * Rejects a role application in Supabase and updates local cache.
+ * Frees up the student to submit a new application for another role.
+ */
+export const rejectRoleApplication = async (
+  appId: string,
+  reviewerName: string
+): Promise<void> => {
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      await (supabase
+        .from("role_applications" as any)
+        .update({
+          status: "rejected",
+          reviewed_by: reviewerName,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", appId) as any);
+    } catch (err) {
+      console.warn("Failed to reject application in Supabase:", err);
+    }
+  }
+
+  const raw = getRoleApplications();
+  const updated = raw.map((a) =>
+    a.id === appId
+      ? { ...a, status: "rejected" as const, reviewedBy: reviewerName, reviewedAt: new Date().toISOString() }
+      : a
+  );
+  try {
+    localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(updated));
+  } catch {}
+  window.dispatchEvent(new CustomEvent("ts_applications_updated"));
+};
+
+/**
+ * Fetches applications from Supabase role_applications and updates localStorage.
+ * Supabase is the single source of truth across all devices.
  */
 export const fetchRoleApplicationsRemote = async (): Promise<RoleApplication[]> => {
   let remoteApps: RoleApplication[] = [];
@@ -335,29 +552,16 @@ export const fetchRoleApplicationsRemote = async (): Promise<RoleApplication[]> 
     }
   }
 
+  // When Supabase is connected, remote records are the authoritative list
+  if (isSupabaseConfigured() && remoteApps.length >= 0) {
+    try {
+      localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(remoteApps));
+    } catch {}
+    return remoteApps;
+  }
+
   const localApps = getRoleApplications();
-  const map = new Map<string, RoleApplication>();
-  remoteApps.forEach((a) => map.set(a.id, a));
-  localApps.forEach((a) => {
-    const existing = map.get(a.id);
-    if (!existing) {
-      map.set(a.id, a);
-    } else {
-      if (a.status !== "pending" && existing.status === "pending") {
-        map.set(a.id, a);
-      }
-    }
-  });
-
-  const merged = Array.from(map.values()).sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
-
-  try {
-    localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(merged));
-  } catch {}
-
-  return merged;
+  return localApps;
 };
 
 // ─── PROMOTED MEMBERS & HIERARCHY RETRIEVAL ─────────────────────────────────
@@ -455,62 +659,13 @@ export const fetchPromotedMembersRemote = async (): Promise<PromotedMember[]> =>
       map.set(key, m);
     }
 
-    // Bidirectional sync: if local has promotions that remote doesn't (e.g. from laptop), backfill them!
-    const toBackfill: PromotedMember[] = [];
-    for (const loc of localMembers) {
-      const key = (loc.studentId || loc.githubUsername).toLowerCase();
-      const vaultKey = _vaultGet(loc.studentId || loc.githubUsername)?.key;
-      if (!map.has(key)) {
-        const memberToSync: PromotedMember = {
-          ...loc,
-          adminKey: loc.adminKey || (vaultKey ? _xorObfuscate(vaultKey) : undefined),
-          hasAdminKey: loc.hasAdminKey || !!vaultKey,
-        };
-        map.set(key, memberToSync);
-        toBackfill.push(memberToSync);
-      } else {
-        const existing = map.get(key)!;
-        if (vaultKey && !existing.adminKey) {
-          existing.adminKey = _xorObfuscate(vaultKey);
-          existing.hasAdminKey = true;
-          toBackfill.push(existing);
-        }
-      }
-    }
-
-    // Push missing promotions to Supabase
-    if (toBackfill.length > 0) {
-      for (const m of toBackfill) {
-        try {
-          await (supabase.from("promoted_members" as any).upsert({
-            id: m.id,
-            student_id: m.studentId,
-            name: m.name,
-            email: m.email || null,
-            github_username: m.githubUsername,
-            avatar: m.avatar || null,
-            academic_year: m.academicYear,
-            course: m.course || null,
-            role: m.role,
-            role_title: m.roleTitle,
-            tier: m.tier,
-            wing: m.wing || null,
-            has_admin_key: m.hasAdminKey || false,
-            admin_key: m.adminKey || null,
-            promoted_by: m.promotedBy,
-            promoted_at: m.promotedAt,
-            is_active: true,
-          }) as any);
-        } catch (_upErr) {}
-      }
-    }
-
-    const merged = Array.from(map.values());
+    // In Supabase mode, remote database records are the single source of truth across all devices.
+    // If a member was demoted, they are absent from remoteMapped and will NOT be re-inserted.
     try {
-      localStorage.setItem(PROMOTED_MEMBERS_KEY, JSON.stringify(merged));
+      localStorage.setItem(PROMOTED_MEMBERS_KEY, JSON.stringify(remoteMapped));
     } catch {}
     window.dispatchEvent(new CustomEvent("ts_hierarchy_updated"));
-    return merged;
+    return remoteMapped;
   } catch (err) {
     console.warn("fetchPromotedMembersRemote exception:", err);
     return getPromotedMembers();
@@ -734,26 +889,82 @@ export const promoteStudent = async (params: {
 
 /**
  * Demotes a member back to normal student.
- * Immediately revokes their admin key if they had one.
+ * Immediately revokes their admin key, removes them from Supabase promoted_members,
+ * updates any approved role application so their role slot is freed,
+ * and clears local storage.
  */
-export const demoteMember = async (identifier: string, demotedBy: string): Promise<void> => {
+export const demoteMember = async (
+  identifier: string,
+  demotedBy: string,
+  memberObj?: PromotedMember
+): Promise<void> => {
   const currentMembers = getPromotedMembers();
-  const member = currentMembers.find(
-    (m) => m.studentId === identifier || m.githubUsername.toLowerCase() === identifier.toLowerCase()
+
+  // Find target member across all identifier candidates
+  const targetKeys = new Set(
+    [identifier, memberObj?.id, memberObj?.studentId, memberObj?.githubUsername]
+      .filter(Boolean)
+      .map((k) => k!.trim().toLowerCase())
   );
 
-  if (member && member.hasAdminKey) {
-    // Revoke admin key from vault
-    revokeAdminKey(member.studentId || member.githubUsername);
+  const member = currentMembers.find((m) => {
+    return (
+      (m.id && targetKeys.has(m.id.toLowerCase())) ||
+      (m.studentId && targetKeys.has(m.studentId.toLowerCase())) ||
+      (m.githubUsername && targetKeys.has(m.githubUsername.toLowerCase()))
+    );
+  }) || memberObj;
+
+  if (member) {
+    // Revoke admin key from local vault
+    revokeAdminKey(member.studentId || member.githubUsername || member.id);
   }
 
-  const filtered = currentMembers.filter(
-    (m) => m.studentId !== identifier && m.githubUsername.toLowerCase() !== identifier.toLowerCase()
-  );
+  // 1. Remove from local promoted members
+  const filtered = currentMembers.filter((m) => {
+    return (
+      (!m.id || !targetKeys.has(m.id.toLowerCase())) &&
+      (!m.studentId || !targetKeys.has(m.studentId.toLowerCase())) &&
+      (!m.githubUsername || !targetKeys.has(m.githubUsername.toLowerCase()))
+    );
+  });
   savePromotedMembers(filtered);
 
-  if (isSupabaseConfigured()) {
+  // 2. Mark any approved application as rejected / vacated so the role opens up and applicant can apply again
+  const localApps = getRoleApplications();
+  const updatedApps = localApps.map((a) => {
+    const matchesUser =
+      (a.studentId && targetKeys.has(a.studentId.toLowerCase())) ||
+      (a.githubUsername && targetKeys.has(a.githubUsername.toLowerCase())) ||
+      (a.id && targetKeys.has(a.id.toLowerCase()));
+    if (matchesUser && a.status === "approved") {
+      return {
+        ...a,
+        status: "rejected" as const,
+        reviewedBy: demotedBy,
+        reviewedAt: new Date().toISOString(),
+      };
+    }
+    return a;
+  });
+  try {
+    localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(updatedApps));
+    window.dispatchEvent(new CustomEvent("ts_applications_updated"));
+  } catch {}
+
+  // 3. Supabase live synchronization
+  if (isSupabaseConfigured() && supabase) {
     try {
+      const orConditions: string[] = [];
+      targetKeys.forEach((key) => {
+        orConditions.push(`id.eq.${key}`, `student_id.eq.${key}`, `github_username.ilike.${key}`);
+      });
+      const orClause = orConditions.join(",");
+
+      // Permanently remove from promoted_members table
+      await (supabase.from("promoted_members" as any).delete().or(orClause) as any);
+
+      // Also set is_active: false in case of soft delete policies
       await (supabase
         .from("promoted_members" as any)
         .update({
@@ -762,11 +973,24 @@ export const demoteMember = async (identifier: string, demotedBy: string): Promi
           admin_key: null,
           has_admin_key: false,
         })
-        .or(`student_id.eq.${identifier},github_username.ilike.${identifier},id.eq.${identifier}`) as any);
+        .or(orClause) as any);
+
+      // Reopen any approved application so position is vacated
+      await (supabase
+        .from("role_applications" as any)
+        .update({
+          status: "rejected",
+          reviewed_by: demotedBy,
+          reviewed_at: new Date().toISOString(),
+        })
+        .or(orClause)
+        .eq("status", "approved") as any);
     } catch (err) {
       console.warn("Failed to sync demotion to Supabase:", err);
     }
   }
+
+  window.dispatchEvent(new CustomEvent("ts_hierarchy_updated"));
 };
 
 // ─── UNIQUE ADMIN SECRET KEY GENERATION & VERIFICATION ──────────────────────
