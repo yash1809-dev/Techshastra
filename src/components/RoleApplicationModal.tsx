@@ -101,25 +101,54 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
   };
 
   // Check whether role is currently occupied by a promoted member
-  const getRoleOccupancy = (role: HierarchyRole, wing?: FunctionalWing): { occupied: boolean; holderName: string | null } => {
+  const getRoleOccupancy = (
+    role: HierarchyRole,
+    wing?: FunctionalWing
+  ): { occupied: boolean; holderName: string | null; count: number; maxCapacity: number } => {
     if (role === "volunteer") {
-      return { occupied: false, holderName: null };
+      return { occupied: false, holderName: null, count: 0, maxCapacity: 9999 };
     }
-    if (role === "president" || role === "vice_president" || role === "general_secretary" || role === "treasurer") {
+    if (role === "president") {
       const holder = promotedMembers.find((m) => m.role === role);
-      return { occupied: !!holder, holderName: holder ? holder.name : null };
+      return { occupied: !!holder, holderName: holder ? holder.name : null, count: holder ? 1 : 0, maxCapacity: 1 };
+    }
+    if (role === "vice_president") {
+      const holders = promotedMembers.filter((m) => m.role === role);
+      return {
+        occupied: holders.length >= 2,
+        holderName: holders.length > 0 ? holders.map((h) => h.name).join(", ") : null,
+        count: holders.length,
+        maxCapacity: 2,
+      };
+    }
+    // General Secretary & Treasurer: open for multiple people (up to 3)
+    if (role === "general_secretary" || role === "treasurer") {
+      const holders = promotedMembers.filter((m) => m.role === role);
+      const maxCapacity = 3;
+      return {
+        occupied: holders.length >= maxCapacity,
+        holderName: holders.length > 0 ? holders.map((h) => h.name).join(", ") : null,
+        count: holders.length,
+        maxCapacity,
+      };
     }
     if (role === "functional_head" || role === "functional_co_head") {
+      const maxSlots = role === "functional_head" ? 1 : 2;
       if (wing) {
-        const holder = promotedMembers.find((m) => m.role === role && m.wing === wing);
-        return { occupied: !!holder, holderName: holder ? holder.name : null };
+        const holders = promotedMembers.filter((m) => m.role === role && m.wing === wing);
+        return {
+          occupied: holders.length >= maxSlots,
+          holderName: holders.length > 0 ? holders.map((h) => h.name).join(", ") : null,
+          count: holders.length,
+          maxCapacity: maxSlots,
+        };
       }
       // If no wing passed, check if all 5 wings have this head/co-head filled
       const allWings: FunctionalWing[] = ["logistics_events", "design_web", "technical", "content_social", "community"];
-      const allTaken = allWings.every((w) => promotedMembers.some((m) => m.role === role && m.wing === w));
-      return { occupied: allTaken, holderName: null };
+      const allTaken = allWings.every((w) => promotedMembers.filter((m) => m.role === role && m.wing === w).length >= maxSlots);
+      return { occupied: allTaken, holderName: null, count: 0, maxCapacity: maxSlots };
     }
-    return { occupied: false, holderName: null };
+    return { occupied: false, holderName: null, count: 0, maxCapacity: 1 };
   };
 
   // Initial role selection prioritizing an open role
@@ -316,9 +345,18 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
           </div>
         )}
 
+        {!isDisabled && !isSelected && occupancy.count > 0 && (
+          <div className="mt-2 flex items-center gap-1 text-[10px] font-medium text-emerald-500">
+            <Sparkles size={11} /> {occupancy.count} of {occupancy.maxCapacity} appointed · Open for more
+          </div>
+        )}
+
         {!isDisabled && isSelected && (
-          <div className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-primary">
-            <CheckCircle2 size={12} /> Selected for Application
+          <div className="mt-2 flex items-center justify-between text-[10px] font-semibold text-primary">
+            <span className="flex items-center gap-1"><CheckCircle2 size={12} /> Selected for Application</span>
+            {occupancy.count > 0 && (
+              <span className="text-[10px] font-normal text-muted-foreground">{occupancy.count}/{occupancy.maxCapacity} appointed</span>
+            )}
           </div>
         )}
       </button>

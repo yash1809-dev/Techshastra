@@ -87,8 +87,8 @@ export const ROLE_DEFINITIONS: Record<HierarchyRole, RoleDefinition> = {
     tier: 1,
     eligibleYears: ["3rd Year", "4th Year"],
     requiresWing: false,
-    isOpenForApplication: true, // Opened for 3rd & 4th year applicants
-    description: "Documentation, governance, administrative coordination, and records.",
+    isOpenForApplication: true, // Opened for 3rd & 4th year applicants (multiple positions available)
+    description: "Documentation, governance, administrative coordination, and records. Open for multiple appointments.",
   },
   treasurer: {
     id: "treasurer",
@@ -96,8 +96,8 @@ export const ROLE_DEFINITIONS: Record<HierarchyRole, RoleDefinition> = {
     tier: 1,
     eligibleYears: ["3rd Year", "4th Year"],
     requiresWing: false,
-    isOpenForApplication: true, // Opened for 3rd & 4th year applicants
-    description: "Budgeting, financial accounts, allocations, and sponsorship management.",
+    isOpenForApplication: true, // Opened for 3rd & 4th year applicants (multiple positions available)
+    description: "Budgeting, financial accounts, allocations, and sponsorship management. Open for multiple appointments.",
   },
   functional_head: {
     id: "functional_head",
@@ -423,24 +423,32 @@ export const fetchPromotedMembersRemote = async (): Promise<PromotedMember[]> =>
     const map = new Map<string, PromotedMember>();
 
     // Map remote database records
-    const remoteMapped: PromotedMember[] = (data || []).map((row: any) => ({
-      id: row.id,
-      studentId: row.student_id,
-      name: row.name,
-      email: row.email || "",
-      githubUsername: row.github_username,
-      avatar: row.avatar || undefined,
-      academicYear: row.academic_year,
-      course: row.course || undefined,
-      role: row.role as HierarchyRole,
-      roleTitle: row.role_title,
-      tier: row.tier,
-      wing: row.wing as FunctionalWing,
-      hasAdminKey: Boolean(row.has_admin_key),
-      adminKey: row.admin_key || undefined,
-      promotedBy: row.promoted_by,
-      promotedAt: row.promoted_at,
-    }));
+    const remoteMapped: PromotedMember[] = (data || []).map((row: any) => {
+      let av = row.avatar || undefined;
+      if (!av && row.github_username) {
+        av =
+          localStorage.getItem(`ts_avatar_${row.github_username}`) ||
+          `https://github.com/${row.github_username}.png`;
+      }
+      return {
+        id: row.id,
+        studentId: row.student_id,
+        name: row.name,
+        email: row.email || "",
+        githubUsername: row.github_username,
+        avatar: av,
+        academicYear: row.academic_year,
+        course: row.course || undefined,
+        role: row.role as HierarchyRole,
+        roleTitle: row.role_title,
+        tier: row.tier,
+        wing: row.wing as FunctionalWing,
+        hasAdminKey: Boolean(row.has_admin_key),
+        adminKey: row.admin_key || undefined,
+        promotedBy: row.promoted_by,
+        promotedAt: row.promoted_at,
+      };
+    });
 
     for (const m of remoteMapped) {
       const key = (m.studentId || m.githubUsername).toLowerCase();
@@ -524,19 +532,33 @@ export const isRoleOccupied = (
 
   const promoted = getPromotedMembers();
 
-  if (role === "president" || role === "vice_president" || role === "general_secretary" || role === "treasurer") {
+  // President: single occupant only
+  if (role === "president") {
     const holder = promoted.find((m) => m.role === role);
     return { occupied: !!holder, holder };
   }
 
+  // Vice President: allows up to 2 appointments
+  if (role === "vice_president") {
+    const holders = promoted.filter((m) => m.role === role);
+    return { occupied: holders.length >= 2, holder: holders[0] };
+  }
+
+  // General Secretary & Treasurer: open for multiple appointments (up to 3)
+  if (role === "general_secretary" || role === "treasurer") {
+    const holders = promoted.filter((m) => m.role === role);
+    return { occupied: holders.length >= 3, holder: holders[0] };
+  }
+
   if (role === "functional_head" || role === "functional_co_head") {
+    const maxSlots = role === "functional_head" ? 1 : 2;
     if (!wing) {
       const wings: FunctionalWing[] = ["logistics_events", "design_web", "technical", "content_social", "community"];
-      const allFilled = wings.every((w) => promoted.some((m) => m.role === role && m.wing === w));
+      const allFilled = wings.every((w) => promoted.filter((m) => m.role === role && m.wing === w).length >= maxSlots);
       return { occupied: allFilled };
     }
-    const holder = promoted.find((m) => m.role === role && m.wing === wing);
-    return { occupied: !!holder, holder };
+    const holders = promoted.filter((m) => m.role === role && m.wing === wing);
+    return { occupied: holders.length >= maxSlots, holder: holders[0] };
   }
 
   return { occupied: false };
@@ -611,13 +633,29 @@ export const promoteStudent = async (params: {
   const existingVaultKey = _vaultGet(params.studentId || params.githubUsername)?.key;
   const existingKey = existingVaultKey || (existingIdx >= 0 ? currentMembers[existingIdx].adminKey : undefined);
 
+  // Guarantee avatar is never left blank: check params -> localStorage -> student store -> GitHub
+  let resolvedAvatar = params.avatar;
+  if (!resolvedAvatar && params.githubUsername) {
+    const cached = localStorage.getItem(`ts_avatar_${params.githubUsername}`);
+    if (cached) {
+      resolvedAvatar = cached;
+    } else {
+      const match = registeredStudents.find(
+        (s) =>
+          (params.studentId && s.id === params.studentId) ||
+          (params.githubUsername && s.githubUsername?.toLowerCase() === params.githubUsername.toLowerCase())
+      );
+      resolvedAvatar = match?.avatar || `https://github.com/${params.githubUsername}.png`;
+    }
+  }
+
   const newPromoted: PromotedMember = {
     id: params.studentId || params.githubUsername,
     studentId: params.studentId,
     name: params.name,
     email: params.email,
     githubUsername: params.githubUsername,
-    avatar: params.avatar,
+    avatar: resolvedAvatar,
     academicYear: params.academicYear,
     course: params.course,
     role: params.role,

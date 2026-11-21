@@ -156,18 +156,55 @@ const MemberCard = ({ student, promotedMember }: { student: any; promotedMember?
 };
 
 // Promoted Leader Card for Hierarchy
-const LeaderCard = ({ member, badgeColor = "primary" }: { member: PromotedMember; badgeColor?: "amber" | "primary" | "muted" }) => {
+const LeaderCard = ({
+  member,
+  badgeColor = "primary",
+  students = [],
+}: {
+  member: PromotedMember;
+  badgeColor?: "amber" | "primary" | "muted";
+  students?: any[];
+}) => {
   const profileLink = member.githubUsername ? `/members/${member.githubUsername}` : "#";
+  const [imgFailed, setImgFailed] = useState(false);
+
+  // Dynamically resolve avatar:
+  // 1. member.avatar (if defined)
+  // 2. localStorage cached avatar ts_avatar_${githubUsername}
+  // 3. Matched student profile in students list (avatar, avatar_url, profiles.avatar_url)
+  // 4. GitHub profile avatar fallback https://github.com/${githubUsername}.png
+  const resolvedAvatar = useMemo(() => {
+    if (imgFailed) return null;
+    if (member.avatar) return member.avatar;
+    if (member.githubUsername) {
+      const cached = localStorage.getItem(`ts_avatar_${member.githubUsername}`);
+      if (cached) return cached;
+      const matched = students.find((s) => {
+        const sGh = (s.githubUsername || s.github_username || s.username || "").toLowerCase();
+        const mGh = member.githubUsername.toLowerCase();
+        return sGh === mGh || (s.id && (s.id === member.studentId || s.id === member.id));
+      });
+      const stAvatar = matched?.avatar || matched?.avatar_url || matched?.profiles?.avatar_url;
+      if (stAvatar) return stAvatar;
+      return `https://github.com/${member.githubUsername}.png`;
+    }
+    return null;
+  }, [member, students, imgFailed]);
 
   return (
     <Link to={profileLink} className="block group">
       <div className="p-4 rounded-2xl glass border border-border/80 group-hover:border-primary/50 transition-all duration-300 bg-card/60 shadow-xs flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 overflow-hidden flex-shrink-0 flex items-center justify-center font-heading text-primary font-bold">
-            {member.avatar ? (
-              <img src={member.avatar} alt={member.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 overflow-hidden flex-shrink-0 flex items-center justify-center font-heading text-primary font-bold relative">
+            {resolvedAvatar ? (
+              <img
+                src={resolvedAvatar}
+                alt={member.name}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                onError={() => setImgFailed(true)}
+              />
             ) : (
-              member.name[0]?.toUpperCase()
+              <span className="select-none text-base font-semibold">{member.name[0]?.toUpperCase() || "M"}</span>
             )}
           </div>
           <div className="min-w-0">
@@ -494,7 +531,7 @@ const Members = () => {
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
                       {hierarchy.tier1.map((leader) => (
-                        <LeaderCard key={leader.id} member={leader} badgeColor="amber" />
+                        <LeaderCard key={leader.id} member={leader} badgeColor="amber" students={allStudents} />
                       ))}
                     </div>
                   )}
@@ -568,7 +605,7 @@ const Members = () => {
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {wingGroup.heads.map((head) => (
-                              <LeaderCard key={head.id} member={head} badgeColor="primary" />
+                              <LeaderCard key={head.id} member={head} badgeColor="primary" students={allStudents} />
                             ))}
                           </div>
                         )}
@@ -612,7 +649,7 @@ const Members = () => {
                             ) : (
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                                 {wingGroup.volunteers.map((vol) => (
-                                  <LeaderCard key={vol.id} member={vol} badgeColor="muted" />
+                                  <LeaderCard key={vol.id} member={vol} badgeColor="muted" students={allStudents} />
                                 ))}
                               </div>
                             )}

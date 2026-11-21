@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X, LogOut, Code2 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -216,119 +217,144 @@ const Navbar = () => {
           </div>
         </div>
 
-        {/* Mobile Menu Overlay */}
-        <AnimatePresence>
-          {isMobileMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, x: "100%" }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed inset-0 bg-background/95 backdrop-blur-xl z-40 flex flex-col items-center justify-start overflow-y-auto py-20 px-6 sm:justify-center md:hidden"
-            >
-              <div className="flex flex-col items-center space-y-6 w-full max-w-sm">
-                {navLinks.map((link, idx) => (
-                  <motion.div
-                    key={link.label}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 + idx * 0.05 }}
-                    className="w-full text-center"
-                  >
-                    {link.href.startsWith('#') ? (
-                      <a
-                        href={link.href}
-                        className="block text-2xl font-heading font-light tracking-widest text-foreground/70 hover:text-primary transition-colors py-2"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setIsMobileMenuOpen(false);
-                          const element = document.querySelector(link.href);
-                          element?.scrollIntoView({ behavior: 'smooth' });
-                        }}
-                      >
-                        {link.label}
-                      </a>
-                    ) : (
-                      <Link
-                        to={link.href}
-                        className="block text-2xl font-heading font-light tracking-widest text-foreground/70 hover:text-primary transition-colors py-2"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                      >
-                        {link.label}
-                      </Link>
-                    )}
-                  </motion.div>
-                ))}
-                
+        {/* Mobile Menu Overlay - Portaled directly to body to avoid containment trapping by navbar glass/backdrop-filter */}
+        {typeof document !== "undefined" &&
+          createPortal(
+            <AnimatePresence>
+              {isMobileMenuOpen && (
                 <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 + navLinks.length * 0.05 }}
-                  className="w-full pt-6 space-y-3"
+                  initial={{ opacity: 0, x: "100%" }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: "100%" }}
+                  transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                  className="fixed inset-0 h-[100dvh] w-screen bg-background/98 backdrop-blur-2xl z-[9999] flex flex-col items-center justify-start overflow-y-auto pt-6 pb-20 px-6 md:hidden"
                 >
-                  {studentSession ? (
-                    <>
-                      <Link to="/student" onClick={() => setIsMobileMenuOpen(false)}>
-                        <Button size="lg" className="w-full rounded-full font-medium tracking-wide bg-primary text-primary-foreground gap-2 shadow-lg shadow-primary/20">
-                          <Code2 size={16} />
-                          Coding & Learning Hub
-                        </Button>
-                      </Link>
-                      <Link to="/members" onClick={() => setIsMobileMenuOpen(false)}>
-                        <Button size="lg" variant="outline" className="w-full rounded-full font-light tracking-widest">
-                          Members Directory
-                        </Button>
-                      </Link>
-                      {studentSession.githubUsername ? (
-                        <Link to={`/members/${studentSession.githubUsername}`} onClick={() => setIsMobileMenuOpen(false)}>
-                          <Button size="lg" variant="outline" className="w-full rounded-full font-light tracking-widest gap-2">
-                            <div className="relative w-5 h-5 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center shrink-0">
-                              <span className="text-[9px] font-bold text-primary">
-                                {studentSession.name ? studentSession.name[0].toUpperCase() : 'U'}
-                              </span>
-                              {navAvatar ? (
-                                <img
-                                  src={navAvatar}
-                                  className="absolute inset-0 w-full h-full object-cover"
-                                  alt=""
-                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                                />
-                              ) : null}
-                            </div>
-                            My Profile
+                  {/* Top bar inside mobile menu with Logo and Close button */}
+                  <div className="w-full max-w-sm flex items-center justify-between pb-4 mb-4 border-b border-border/40">
+                    <Link to="/" className="flex items-center space-x-2.5" onClick={() => setIsMobileMenuOpen(false)}>
+                      <img src="/favicon.ico" alt="TECHSHASTRA Logo" className="w-7 h-7 object-contain" />
+                      <span className="font-heading text-base tracking-[0.15em] font-light text-foreground">
+                        TECHSHASTRA
+                      </span>
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-foreground/80 hover:text-foreground h-9 w-9 rounded-full"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      aria-label="Close menu"
+                    >
+                      <X size={22} />
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-col items-center space-y-6 w-full max-w-sm">
+                    {navLinks.map((link, idx) => (
+                      <motion.div
+                        key={link.label}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 + idx * 0.05 }}
+                        className="w-full text-center"
+                      >
+                        {link.href.startsWith("#") ? (
+                          <a
+                            href={link.href}
+                            className="block text-2xl font-heading font-light tracking-widest text-foreground/70 hover:text-primary transition-colors py-2"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setIsMobileMenuOpen(false);
+                              const element = document.querySelector(link.href);
+                              element?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                          >
+                            {link.label}
+                          </a>
+                        ) : (
+                          <Link
+                            to={link.href}
+                            className="block text-2xl font-heading font-light tracking-widest text-foreground/70 hover:text-primary transition-colors py-2"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                          >
+                            {link.label}
+                          </Link>
+                        )}
+                      </motion.div>
+                    ))}
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 + navLinks.length * 0.05 }}
+                      className="w-full pt-6 space-y-3"
+                    >
+                      {studentSession ? (
+                        <>
+                          <Link to="/student" onClick={() => setIsMobileMenuOpen(false)}>
+                            <Button size="lg" className="w-full rounded-full font-medium tracking-wide bg-primary text-primary-foreground gap-2 shadow-lg shadow-primary/20">
+                              <Code2 size={16} />
+                              Coding & Learning Hub
+                            </Button>
+                          </Link>
+                          <Link to="/members" onClick={() => setIsMobileMenuOpen(false)}>
+                            <Button size="lg" variant="outline" className="w-full rounded-full font-light tracking-widest">
+                              Members Directory
+                            </Button>
+                          </Link>
+                          {studentSession.githubUsername ? (
+                            <Link to={`/members/${studentSession.githubUsername}`} onClick={() => setIsMobileMenuOpen(false)}>
+                              <Button size="lg" variant="outline" className="w-full rounded-full font-light tracking-widest gap-2">
+                                <div className="relative w-5 h-5 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center shrink-0">
+                                  <span className="text-[9px] font-bold text-primary">
+                                    {studentSession.name ? studentSession.name[0].toUpperCase() : "U"}
+                                  </span>
+                                  {navAvatar ? (
+                                    <img
+                                      src={navAvatar}
+                                      className="absolute inset-0 w-full h-full object-cover"
+                                      alt=""
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                                      }}
+                                    />
+                                  ) : null}
+                                </div>
+                                My Profile
+                              </Button>
+                            </Link>
+                          ) : null}
+                          <Button
+                            size="lg"
+                            variant="destructive"
+                            className="w-full rounded-full font-light tracking-widest gap-2"
+                            onClick={() => {
+                              setIsMobileMenuOpen(false);
+                              logout();
+                            }}
+                          >
+                            <LogOut size={16} />
+                            Sign Out
+                          </Button>
+                        </>
+                      ) : (
+                        <Link to="/join" onClick={() => setIsMobileMenuOpen(false)}>
+                          <Button size="lg" className="w-full rounded-full font-light tracking-widest bg-primary text-primary-foreground shadow-xl shadow-primary/20">
+                            Join Now
                           </Button>
                         </Link>
-                      ) : null}
-                      <Button
-                        size="lg"
-                        variant="destructive"
-                        className="w-full rounded-full font-light tracking-widest gap-2"
-                        onClick={() => {
-                          setIsMobileMenuOpen(false);
-                          logout();
-                        }}
-                      >
-                        <LogOut size={16} />
-                        Sign Out
-                      </Button>
-                    </>
-                  ) : (
-                    <Link to="/join" onClick={() => setIsMobileMenuOpen(false)}>
-                      <Button size="lg" className="w-full rounded-full font-light tracking-widest bg-primary text-primary-foreground shadow-xl shadow-primary/20">
-                        Join Now
-                      </Button>
-                    </Link>
-                  )}
-                </motion.div>
-              </div>
+                      )}
+                    </motion.div>
+                  </div>
 
-              {/* Theme toggle — fixed to bottom-right corner of mobile menu */}
-              <div className="absolute bottom-6 right-6">
-                <ThemeToggle />
-              </div>
-            </motion.div>
+                  {/* Theme toggle — fixed to bottom-right corner of mobile menu */}
+                  <div className="absolute bottom-6 right-6">
+                    <ThemeToggle />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>,
+            document.body
           )}
-        </AnimatePresence>
       </div>
     </nav>
   );
