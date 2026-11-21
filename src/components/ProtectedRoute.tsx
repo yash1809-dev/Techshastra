@@ -12,7 +12,7 @@ import { type AdminRole } from "@/lib/adminStore";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
-import { getPromotedMembers } from "@/lib/services/hierarchyService";
+import { getPromotedMembers, fetchPromotedMembersRemote } from "@/lib/services/hierarchyService";
 
 const IDLE_WARN_MS  = 25 * 60 * 1000;  // 25 min → show warning
 const IDLE_LIMIT_MS = 30 * 60 * 1000;  // 30 min → force logout
@@ -73,13 +73,22 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
           Boolean(token?.startsWith("ts_leader_"));
 
         if (isLeaderSession) {
-          const promoted = getPromotedMembers();
-          const match = promoted.find(
+          let promoted = getPromotedMembers();
+          let match = promoted.find(
             (m) =>
               (session.userId && (m.studentId === session.userId || m.id === session.userId)) ||
               (session.name && m.name.toLowerCase() === session.name.toLowerCase()) ||
               (session.name && m.githubUsername.toLowerCase() === session.name.toLowerCase())
           );
+          if (!match) {
+            promoted = await fetchPromotedMembersRemote();
+            match = promoted.find(
+              (m) =>
+                (session.userId && (m.studentId === session.userId || m.id === session.userId)) ||
+                (session.name && m.name.toLowerCase() === session.name.toLowerCase()) ||
+                (session.name && m.githubUsername.toLowerCase() === session.name.toLowerCase())
+            );
+          }
           if (match && match.tier <= 2) {
             if (isMounted) {
               const mapped: AdminRole = match.tier === 1 ? "super_admin" : "member";

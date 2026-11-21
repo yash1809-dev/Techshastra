@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,6 +7,8 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { StudentAuthProvider } from "@/hooks/useStudentAuth";
 import { Loader2 } from "lucide-react";
 import { getStoredPageVisibility } from "./lib/adminStore";
+import { fetchPromotedMembersRemote, fetchRoleApplicationsRemote } from "@/lib/services/hierarchyService";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { NetworkStatusBanner } from "./components/NetworkStatusBanner";
@@ -70,10 +72,41 @@ function PageGuard({ path, children }: { path: string; children: React.ReactNode
   return <>{children}</>;
 }
 
+// Synchronizes hierarchy promotions and applications globally across devices and tabs
+function HierarchyGlobalSync() {
+  useEffect(() => {
+    fetchPromotedMembersRemote();
+    fetchRoleApplicationsRemote();
+
+    if (isSupabaseConfigured()) {
+      const channel = supabase
+        .channel("public:hierarchy_global_sync")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "promoted_members" },
+          () => fetchPromotedMembersRemote()
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "role_applications" },
+          () => fetchRoleApplicationsRemote()
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, []);
+
+  return null;
+}
+
 const App = () => (
   <ErrorBoundary>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <StudentAuthProvider>
+        <HierarchyGlobalSync />
         <TooltipProvider>
           <Toaster />
           <Sonner />

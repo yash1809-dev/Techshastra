@@ -35,12 +35,14 @@ import {
   ArrowRight,
   ExternalLink,
 } from "lucide-react";
-import { getAllStudents as getLocalStudents, type StudentProfile } from "@/lib/studentStore";
+import { getAllStudents as getLocalStudents, deleteStudent, type StudentProfile } from "@/lib/studentStore";
 import { getAllStudents as getRemoteStudents } from "@/lib/services/studentService";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   getStructuredHierarchy,
   getPromotedMembers,
+  fetchPromotedMembersRemote,
   WING_METADATA,
   type StructuredHierarchy,
   type PromotedMember,
@@ -221,19 +223,30 @@ const Members = () => {
   useEffect(() => {
     const loadStudents = async () => {
       try {
-        const remote = await getRemoteStudents();
+        if (isSupabaseConfigured()) {
+          const remote = await getRemoteStudents();
+          if (Array.isArray(remote)) {
+            const activeRemote = remote.filter((r: any) => r.is_active);
+            setAllStudents(activeRemote);
+
+            // Clean up stale or deleted profiles from local store
+            try {
+              const remoteKeys = new Set(
+                activeRemote.map((s: any) => (s.githubUsername || s.username || s.email || s.id).toLowerCase())
+              );
+              const local = getLocalStudents();
+              for (const loc of local) {
+                const key = (loc.githubUsername || loc.email || loc.id).toLowerCase();
+                if (!remoteKeys.has(key)) {
+                  deleteStudent(loc.id);
+                }
+              }
+            } catch (_cleanErr) {}
+            return;
+          }
+        }
         const local = getLocalStudents().filter((s) => s.is_active);
-        const map = new Map<string, any>();
-        for (const s of local) {
-          const key = (s.githubUsername || s.email || s.id).toLowerCase();
-          map.set(key, s);
-        }
-        for (const s of (remote || []).filter((r: any) => r.is_active)) {
-          const key = (s.githubUsername || s.email || s.id).toLowerCase();
-          map.set(key, s);
-        }
-        const merged = Array.from(map.values());
-        setAllStudents(merged);
+        setAllStudents(local);
       } catch (_e) {
         const local = getLocalStudents().filter((s) => s.is_active);
         setAllStudents(local);
@@ -245,6 +258,39 @@ const Members = () => {
       setHierarchy(getStructuredHierarchy());
     };
     loadHierarchy();
+
+    // Cross-device sync: fetch live promoted members from Supabase
+    fetchPromotedMembersRemote().then(() => {
+      setHierarchy(getStructuredHierarchy());
+    });
+
+    // Realtime Supabase listener on student_profiles and promoted_members
+    let channel: any = null;
+    if (isSupabaseConfigured()) {
+      channel = supabase
+        .channel("public:members_page_live")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "student_profiles" },
+          () => {
+            loadStudents();
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "promoted_members" },
+          () => {
+            fetchPromotedMembersRemote().then(() => loadHierarchy());
+          }
+        )
+        .subscribe();
+    }
+
+    const onFocus = () => {
+      loadStudents();
+      fetchPromotedMembersRemote().then(() => loadHierarchy());
+    };
+    window.addEventListener("focus", onFocus);
 
     const avatarHandler = (e: Event) => {
       const { avatarUrl, studentId, githubUsername } =
@@ -263,6 +309,8 @@ const Members = () => {
     window.addEventListener("ts_avatar_updated", avatarHandler);
     window.addEventListener("ts_hierarchy_updated", loadHierarchy);
     return () => {
+      if (channel) supabase.removeChannel(channel);
+      window.removeEventListener("focus", onFocus);
       window.removeEventListener("ts_avatar_updated", avatarHandler);
       window.removeEventListener("ts_hierarchy_updated", loadHierarchy);
     };

@@ -531,6 +531,53 @@ const MemberEdit = () => {
               .update({ avatar_url: avatar || null })
               .eq("id", targetUserId);
           }
+
+          // Sync education, experience & certifications to Supabase for cross-device consistency
+          const profileId = (student as any).id;
+          if (profileId) {
+            // Sync education
+            await supabase.from("student_education" as any).delete().eq("student_profile_id", profileId);
+            if (education && education.length > 0) {
+              await supabase.from("student_education" as any).insert(
+                education.map((e) => ({
+                  student_profile_id: profileId,
+                  institution: e.institution,
+                  degree: e.degree,
+                  field: e.field || null,
+                  start_year: e.startYear,
+                  end_year: e.endYear || null,
+                  grade: e.grade || null,
+                }))
+              );
+            }
+            // Sync experience
+            await supabase.from("student_experience" as any).delete().eq("student_profile_id", profileId);
+            if (experience && experience.length > 0) {
+              await supabase.from("student_experience" as any).insert(
+                experience.map((exp) => ({
+                  student_profile_id: profileId,
+                  company: exp.company,
+                  role: exp.role,
+                  start_date: exp.startDate,
+                  end_date: exp.endDate || null,
+                  description: exp.description || null,
+                }))
+              );
+            }
+            // Sync certifications
+            await supabase.from("student_certifications" as any).delete().eq("student_profile_id", profileId);
+            if (certifications && certifications.length > 0) {
+              await supabase.from("student_certifications" as any).insert(
+                certifications.map((c) => ({
+                  student_profile_id: profileId,
+                  name: c.name,
+                  issuer: c.issuer,
+                  issue_date: c.date || null,
+                  credential_url: c.url || null,
+                }))
+              );
+            }
+          }
         } catch (_avatarErr) {}
       }
     } catch (_err) {}

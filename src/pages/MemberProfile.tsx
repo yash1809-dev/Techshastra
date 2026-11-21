@@ -29,11 +29,12 @@ import {
   LogOut, ChevronRight, Copy, Check, Calendar, Users, RefreshCw, Eye, EyeOff, Key, Plus, Crown, ShieldCheck,
 } from "lucide-react";
 import {
-  getStudentByGithub, updateStudent,
+  getStudentByGithub, updateStudent, deleteStudent,
   type StudentProfile, type EducationEntry,
   type ExperienceEntry, type CertificationEntry,
 } from "@/lib/studentStore";
 import { getStudentByUsername } from "@/lib/services/studentService";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   fetchGHUser, fetchGHRepos, aggregateLanguages,
   langPercents, langColor, topRepos, clearGHCache,
@@ -42,7 +43,14 @@ import {
 import { openResumePrintWindow, previewResume } from "@/components/ResumeDocument";
 import ResumeBuilderModal from "@/components/ResumeBuilderModal";
 import { RoleApplicationModal } from "@/components/RoleApplicationModal";
-import { getPromotedMembers, generateUniqueAdminKey, getOwnAdminKey, WING_METADATA, type PromotedMember } from "@/lib/services/hierarchyService";
+import {
+  getPromotedMembers,
+  fetchPromotedMembersRemote,
+  generateUniqueAdminKey,
+  getOwnAdminKey,
+  WING_METADATA,
+  type PromotedMember,
+} from "@/lib/services/hierarchyService";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import ContributionGraph from "@/components/ContributionGraph";
 import { buildAutoProfile, profileNeedsAutoFill } from "@/lib/autoProfile";
@@ -273,7 +281,9 @@ const MemberProfile = () => {
 
   // Check if this student is promoted in the hierarchy tree
   useEffect(() => {
+    let isMounted = true;
     const checkPromotion = () => {
+      if (!isMounted) return;
       const list = getPromotedMembers();
       const found = list.find(
         (m) =>
@@ -282,7 +292,7 @@ const MemberProfile = () => {
           (student?.name && m.name.toLowerCase() === student.name.toLowerCase())
       );
       setPromotedInfo(found || null);
-      // Load key from vault if one exists (own profile only)
+      // Load key from vault or cross-device synced record (own profile only)
       if (found && found.hasAdminKey) {
         const existingKey = getOwnAdminKey(found.studentId || found.githubUsername);
         setAdminKeyValue(existingKey);
@@ -291,8 +301,17 @@ const MemberProfile = () => {
       }
     };
     checkPromotion();
+
+    // Fetch remote promotions so mobile immediately resolves role & admin key
+    fetchPromotedMembersRemote().then(() => {
+      if (isMounted) checkPromotion();
+    });
+
     window.addEventListener("ts_hierarchy_updated", checkPromotion);
-    return () => window.removeEventListener("ts_hierarchy_updated", checkPromotion);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("ts_hierarchy_updated", checkPromotion);
+    };
   }, [student, username]);
 
   const sessionRef = useRef(session);
@@ -305,22 +324,39 @@ const MemberProfile = () => {
     setStatus("loading");
     try {
       let s: any = null;
-      try {
-        const remote = await getStudentByUsername(username);
-        if (remote) {
-          s = {
-            ...remote,
-            githubUsername: remote.github_username || remote.githubUsername,
-            name: remote.name || remote.username,
-            avatar: (remote as any).avatar || (remote as any).avatar_url || (remote as any).profiles?.avatar_url,
-            linkedinUrl: remote.linkedin_url || (remote as any).linkedinUrl,
-            portfolioUrl: remote.portfolio_url || (remote as any).portfolioUrl,
-            education: remote.education || [],
-            experience: remote.experience || [],
-            certifications: remote.certifications || [],
-          };
+      let searchedRemote = false;
+
+      if (isSupabaseConfigured()) {
+        searchedRemote = true;
+        try {
+          const remote = await getStudentByUsername(username);
+          if (remote) {
+            s = {
+              ...remote,
+              githubUsername: remote.github_username || remote.githubUsername,
+              name: remote.name || remote.username,
+              avatar: (remote as any).avatar || (remote as any).avatar_url || (remote as any).profiles?.avatar_url,
+              linkedinUrl: remote.linkedin_url || (remote as any).linkedinUrl,
+              portfolioUrl: remote.portfolio_url || (remote as any).portfolioUrl,
+              education: remote.education || [],
+              experience: remote.experience || [],
+              certifications: remote.certifications || [],
+            };
+          }
+        } catch (_e) {}
+      }
+
+      // If Supabase was queried and returned null, user was deleted directly from DB.
+      // Clean stale entry from local store and show 404 not found.
+      if (searchedRemote && !s) {
+        const local = getStudentByGithub(username);
+        if (local) {
+          deleteStudent(local.id);
         }
-      } catch (_e) {}
+        setStatus("not_found");
+        return;
+      }
+
       if (!s) {
         s = getStudentByGithub(username);
       }

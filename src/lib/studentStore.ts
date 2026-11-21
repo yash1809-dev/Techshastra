@@ -209,6 +209,7 @@ const store = createLocalStore<StudentProfile>("ts_students");
 
 export const getAllStudents = store.getAll;
 export const getStudentById = store.getById;
+export const deleteStudent = store.delete;
 
 export const getStudentByEmail = (email: string): StudentProfile | null =>
   store.getAll().find((s) => s.email.toLowerCase() === email.toLowerCase()) ?? null;

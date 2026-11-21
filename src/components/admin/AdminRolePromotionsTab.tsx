@@ -48,6 +48,7 @@ import {
   getRoleApplications,
   fetchRoleApplicationsRemote,
   getPromotedMembers,
+  fetchPromotedMembersRemote,
   promoteStudent,
   demoteMember,
   ROLE_DEFINITIONS,
@@ -57,6 +58,7 @@ import {
   type HierarchyRole,
   type FunctionalWing,
 } from "@/lib/services/hierarchyService";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 interface Props {
   currentAdminName?: string;
@@ -91,9 +93,15 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
     setApplications(getRoleApplications());
     setPromotedMembers(getPromotedMembers());
     try {
-      const merged = await fetchRoleApplicationsRemote();
-      if (merged && merged.length > 0) {
-        setApplications(merged);
+      const [mergedApps, remotePromoted] = await Promise.all([
+        fetchRoleApplicationsRemote(),
+        fetchPromotedMembersRemote(),
+      ]);
+      if (mergedApps && mergedApps.length > 0) {
+        setApplications(mergedApps);
+      }
+      if (remotePromoted && remotePromoted.length > 0) {
+        setPromotedMembers(remotePromoted);
       }
     } catch (_e) {}
   };
@@ -103,7 +111,26 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
     const handleUpdate = () => loadData();
     window.addEventListener("ts_applications_updated", handleUpdate);
     window.addEventListener("ts_hierarchy_updated", handleUpdate);
+
+    let channel: any = null;
+    if (isSupabaseConfigured()) {
+      channel = supabase
+        .channel("public:admin_promotions_tab_live")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "role_applications" },
+          () => loadData()
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "promoted_members" },
+          () => loadData()
+        )
+        .subscribe();
+    }
+
     return () => {
+      if (channel) supabase.removeChannel(channel);
       window.removeEventListener("ts_applications_updated", handleUpdate);
       window.removeEventListener("ts_hierarchy_updated", handleUpdate);
     };

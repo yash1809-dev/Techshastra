@@ -166,8 +166,9 @@ export interface PromotedMember {
   roleTitle: string;
   tier: TierLevel;
   wing?: FunctionalWing;
-  /** Key lives in obfuscated vault (ts_akv) — never in this blob. */
   hasAdminKey?: boolean;
+  /** Obfuscated key stored for cross-device synchronization */
+  adminKey?: string;
   promotedBy: string;
   promotedAt: string;
 }
@@ -398,6 +399,117 @@ export const savePromotedMembers = (members: PromotedMember[]): void => {
 };
 
 /**
+ * Fetches promoted members from Supabase with cross-device sync.
+ * Automatically backfills existing promotions from laptop to Supabase
+ * so mobile and other devices immediately see the updated roles and keys.
+ */
+export const fetchPromotedMembersRemote = async (): Promise<PromotedMember[]> => {
+  if (!isSupabaseConfigured()) {
+    return getPromotedMembers();
+  }
+
+  try {
+    const { data, error } = await (supabase
+      .from("promoted_members" as any)
+      .select("*")
+      .eq("is_active", true) as any);
+
+    if (error) {
+      console.warn("fetchPromotedMembersRemote error:", error);
+      return getPromotedMembers();
+    }
+
+    const localMembers = getPromotedMembers();
+    const map = new Map<string, PromotedMember>();
+
+    // Map remote database records
+    const remoteMapped: PromotedMember[] = (data || []).map((row: any) => ({
+      id: row.id,
+      studentId: row.student_id,
+      name: row.name,
+      email: row.email || "",
+      githubUsername: row.github_username,
+      avatar: row.avatar || undefined,
+      academicYear: row.academic_year,
+      course: row.course || undefined,
+      role: row.role as HierarchyRole,
+      roleTitle: row.role_title,
+      tier: row.tier,
+      wing: row.wing as FunctionalWing,
+      hasAdminKey: Boolean(row.has_admin_key),
+      adminKey: row.admin_key || undefined,
+      promotedBy: row.promoted_by,
+      promotedAt: row.promoted_at,
+    }));
+
+    for (const m of remoteMapped) {
+      const key = (m.studentId || m.githubUsername).toLowerCase();
+      map.set(key, m);
+    }
+
+    // Bidirectional sync: if local has promotions that remote doesn't (e.g. from laptop), backfill them!
+    const toBackfill: PromotedMember[] = [];
+    for (const loc of localMembers) {
+      const key = (loc.studentId || loc.githubUsername).toLowerCase();
+      const vaultKey = _vaultGet(loc.studentId || loc.githubUsername)?.key;
+      if (!map.has(key)) {
+        const memberToSync: PromotedMember = {
+          ...loc,
+          adminKey: loc.adminKey || (vaultKey ? _xorObfuscate(vaultKey) : undefined),
+          hasAdminKey: loc.hasAdminKey || !!vaultKey,
+        };
+        map.set(key, memberToSync);
+        toBackfill.push(memberToSync);
+      } else {
+        const existing = map.get(key)!;
+        if (vaultKey && !existing.adminKey) {
+          existing.adminKey = _xorObfuscate(vaultKey);
+          existing.hasAdminKey = true;
+          toBackfill.push(existing);
+        }
+      }
+    }
+
+    // Push missing promotions to Supabase
+    if (toBackfill.length > 0) {
+      for (const m of toBackfill) {
+        try {
+          await (supabase.from("promoted_members" as any).upsert({
+            id: m.id,
+            student_id: m.studentId,
+            name: m.name,
+            email: m.email || null,
+            github_username: m.githubUsername,
+            avatar: m.avatar || null,
+            academic_year: m.academicYear,
+            course: m.course || null,
+            role: m.role,
+            role_title: m.roleTitle,
+            tier: m.tier,
+            wing: m.wing || null,
+            has_admin_key: m.hasAdminKey || false,
+            admin_key: m.adminKey || null,
+            promoted_by: m.promotedBy,
+            promoted_at: m.promotedAt,
+            is_active: true,
+          }) as any);
+        } catch (_upErr) {}
+      }
+    }
+
+    const merged = Array.from(map.values());
+    try {
+      localStorage.setItem(PROMOTED_MEMBERS_KEY, JSON.stringify(merged));
+    } catch {}
+    window.dispatchEvent(new CustomEvent("ts_hierarchy_updated"));
+    return merged;
+  } catch (err) {
+    console.warn("fetchPromotedMembersRemote exception:", err);
+    return getPromotedMembers();
+  }
+};
+
+/**
  * Checks whether a role (and optional wing) is currently filled by an appointed member.
  * When a role is occupied, applicants cannot select it until the position opens again.
  * Volunteer role is never occupied and remains open for all years under any wing.
@@ -464,13 +576,24 @@ export const promoteStudent = async (params: {
 }): Promise<PromotedMember> => {
   // Validate that student profile actually exists in the system
   const registeredStudents = getAllStudents();
-  const profileExists = registeredStudents.some(
+  let profileExists = registeredStudents.some(
     (s) =>
       (params.studentId && s.id === params.studentId) ||
       (params.githubUsername && s.githubUsername?.toLowerCase() === params.githubUsername.toLowerCase()) ||
       (params.email && s.email?.toLowerCase() === params.email.toLowerCase()) ||
       (params.name && s.name?.toLowerCase() === params.name.toLowerCase())
   );
+
+  if (!profileExists && isSupabaseConfigured()) {
+    try {
+      const { data: remoteProfile } = await (supabase
+        .from("student_profiles" as any)
+        .select("id, username, github_username")
+        .or(`id.eq.${params.studentId},username.ilike.${params.githubUsername || params.name},github_username.ilike.${params.githubUsername || params.name}`)
+        .maybeSingle() as any);
+      if (remoteProfile) profileExists = true;
+    } catch {}
+  }
 
   if (!profileExists) {
     throw new Error(
@@ -485,6 +608,9 @@ export const promoteStudent = async (params: {
     (m) => m.studentId === params.studentId || m.githubUsername.toLowerCase() === params.githubUsername.toLowerCase()
   );
 
+  const existingVaultKey = _vaultGet(params.studentId || params.githubUsername)?.key;
+  const existingKey = existingVaultKey || (existingIdx >= 0 ? currentMembers[existingIdx].adminKey : undefined);
+
   const newPromoted: PromotedMember = {
     id: params.studentId || params.githubUsername,
     studentId: params.studentId,
@@ -498,7 +624,8 @@ export const promoteStudent = async (params: {
     roleTitle: roleDef.title,
     tier: roleDef.tier,
     wing: params.wing,
-    hasAdminKey: existingIdx >= 0 ? (!!_vaultGet(params.studentId || params.githubUsername)) : false,
+    hasAdminKey: existingIdx >= 0 ? (!!existingKey) : false,
+    adminKey: existingKey ? (existingVaultKey ? _xorObfuscate(existingVaultKey) : existingKey) : undefined,
     promotedBy: params.promotedBy,
     promotedAt: new Date().toISOString(),
   };
@@ -513,6 +640,33 @@ export const promoteStudent = async (params: {
 
   savePromotedMembers(updatedList);
 
+  // Sync to Supabase promoted_members table for cross-device support
+  if (isSupabaseConfigured()) {
+    try {
+      await (supabase.from("promoted_members" as any).upsert({
+        id: newPromoted.id,
+        student_id: newPromoted.studentId,
+        name: newPromoted.name,
+        email: newPromoted.email || null,
+        github_username: newPromoted.githubUsername,
+        avatar: newPromoted.avatar || null,
+        academic_year: newPromoted.academicYear,
+        course: newPromoted.course || null,
+        role: newPromoted.role,
+        role_title: newPromoted.roleTitle,
+        tier: newPromoted.tier,
+        wing: newPromoted.wing || null,
+        has_admin_key: newPromoted.hasAdminKey || false,
+        admin_key: newPromoted.adminKey || null,
+        promoted_by: newPromoted.promotedBy,
+        promoted_at: newPromoted.promotedAt,
+        is_active: true,
+      }) as any);
+    } catch (dbErr) {
+      console.warn("Failed to sync promoted member to Supabase:", dbErr);
+    }
+  }
+
   // If promoted from application, update application status
   if (params.applicationId) {
     const apps = getRoleApplications();
@@ -521,8 +675,20 @@ export const promoteStudent = async (params: {
         ? { ...a, status: "approved" as const, reviewedBy: params.promotedBy, reviewedAt: new Date().toISOString() }
         : a
     );
-    localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(updatedApps));
+    try {
+      localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(updatedApps));
+    } catch {}
     window.dispatchEvent(new CustomEvent("ts_applications_updated"));
+
+    if (isSupabaseConfigured()) {
+      try {
+        await (supabase.from("role_applications" as any).update({
+          status: "approved",
+          reviewed_by: params.promotedBy,
+          reviewed_at: new Date().toISOString(),
+        }).eq("id", params.applicationId) as any);
+      } catch (_appErr) {}
+    }
   }
 
   return newPromoted;
@@ -547,6 +713,22 @@ export const demoteMember = async (identifier: string, demotedBy: string): Promi
     (m) => m.studentId !== identifier && m.githubUsername.toLowerCase() !== identifier.toLowerCase()
   );
   savePromotedMembers(filtered);
+
+  if (isSupabaseConfigured()) {
+    try {
+      await (supabase
+        .from("promoted_members" as any)
+        .update({
+          is_active: false,
+          demoted_at: new Date().toISOString(),
+          admin_key: null,
+          has_admin_key: false,
+        })
+        .or(`student_id.eq.${identifier},github_username.ilike.${identifier},id.eq.${identifier}`) as any);
+    } catch (err) {
+      console.warn("Failed to sync demotion to Supabase:", err);
+    }
+  }
 };
 
 // ─── UNIQUE ADMIN SECRET KEY GENERATION & VERIFICATION ──────────────────────
@@ -570,10 +752,19 @@ export const generateUniqueAdminKey = (identifier: string): string => {
     throw new Error("Volunteers do not have administrative panel access.");
   }
 
-  // If already generated, return existing key from the secure vault (NOT from the member blob)
+  // If already generated in local vault, return it
   const existing = _vaultGet(member.studentId || member.githubUsername);
   if (existing?.key) {
     return existing.key;
+  }
+
+  // If key exists on member (e.g. from Supabase sync), deobfuscate, cache and return
+  if (member.adminKey) {
+    const recovered = _xorDeobfuscate(member.adminKey);
+    if (recovered) {
+      _vaultSet(member.studentId || member.githubUsername, recovered);
+      return recovered;
+    }
   }
 
   // Generate cryptographic high-entropy key: TS-ADM-XXXX-XXXX-XXXX
@@ -582,12 +773,27 @@ export const generateUniqueAdminKey = (identifier: string): string => {
     .join("");
   const key = `TS-ADM-${randomPart.slice(0, 4)}-${randomPart.slice(4, 8)}-${randomPart.slice(8, 12)}`;
 
-  // Store ONLY in vault (obfuscated, separate key) — never in the member blob
+  // Store in vault (local storage)
   _vaultSet(member.studentId || member.githubUsername, key);
 
-  // Update hasAdminKey flag on the member blob (just a boolean, no key value)
-  members[idx] = { ...member, hasAdminKey: true };
+  // Update hasAdminKey and adminKey on the member blob
+  const obfuscatedKey = _xorObfuscate(key);
+  members[idx] = { ...member, hasAdminKey: true, adminKey: obfuscatedKey };
   savePromotedMembers(members);
+
+  // Sync to Supabase promoted_members for cross-device visibility
+  if (isSupabaseConfigured()) {
+    try {
+      (supabase
+        .from("promoted_members" as any)
+        .update({
+          has_admin_key: true,
+          admin_key: obfuscatedKey,
+        })
+        .or(`student_id.eq.${member.studentId},github_username.ilike.${member.githubUsername},id.eq.${member.id}`) as any)
+        .then(() => {});
+    } catch (_syncErr) {}
+  }
 
   // Sync with Admin Credentials store for legacy verify_admin_login fallback
   try {
@@ -621,8 +827,21 @@ export const revokeAdminKey = (identifier: string): void => {
     _vaultDelete(members[idx].studentId || members[idx].githubUsername);
 
     // Update the hasAdminKey flag in the member blob
-    members[idx] = { ...members[idx], hasAdminKey: false };
+    members[idx] = { ...members[idx], hasAdminKey: false, adminKey: undefined };
     savePromotedMembers(members);
+
+    if (isSupabaseConfigured()) {
+      try {
+        (supabase
+          .from("promoted_members" as any)
+          .update({
+            has_admin_key: false,
+            admin_key: null,
+          })
+          .or(`student_id.eq.${members[idx].studentId},github_username.ilike.${members[idx].githubUsername},id.eq.${members[idx].id}`) as any)
+          .then(() => {});
+      } catch {}
+    }
 
     // Also remove from admin credentials store
     if (key) {
@@ -637,6 +856,7 @@ export const revokeAdminKey = (identifier: string): void => {
 
 /**
  * Verifies admin credentials via Name + Secret Key.
+ * Checks both local vault and cross-device synced promoted_members records.
  */
 export const verifyAdminKeyLogin = (name: string, key: string): { success: boolean; member?: PromotedMember } => {
   const cleanName = name.trim().toLowerCase();
@@ -652,11 +872,27 @@ export const verifyAdminKeyLogin = (name: string, key: string): { success: boole
 
   if (!candidate) return { success: false };
 
-  // Look up the key in the vault (never stored in the member blob)
+  // 1. Look up the key in the local vault
   const vaultEntry = _vaultGet(candidate.studentId || candidate.githubUsername);
   if (vaultEntry?.key && vaultEntry.key === cleanKey) {
     return { success: true, member: candidate };
   }
+
+  // 2. Look up the deobfuscated adminKey synced from Supabase (for mobile/new device)
+  if (candidate.adminKey) {
+    const deobfuscated = _xorDeobfuscate(candidate.adminKey);
+    if (deobfuscated === cleanKey) {
+      _vaultSet(candidate.studentId || candidate.githubUsername, cleanKey);
+      return { success: true, member: candidate };
+    }
+  }
+
+  // 3. Direct match fallback
+  if (candidate.adminKey === cleanKey) {
+    _vaultSet(candidate.studentId || candidate.githubUsername, cleanKey);
+    return { success: true, member: candidate };
+  }
+
   return { success: false };
 };
 
@@ -712,9 +948,33 @@ export const getStructuredHierarchy = (): StructuredHierarchy => {
 
 /**
  * Returns the admin key for a specific promoted member's own profile view.
- * Only call this when the logged-in student IS the identifier (own profile).
- * Returns undefined if no key has been generated yet.
+ * Works across all devices (laptop, mobile, tablet) by checking the local
+ * vault first and falling back to the cross-device synced record.
  */
 export const getOwnAdminKey = (identifier: string): string | undefined => {
-  return _vaultGet(identifier)?.key;
+  if (!identifier) return undefined;
+  const clean = identifier.trim().toLowerCase();
+
+  // 1. Check local vault
+  const localKey = _vaultGet(identifier)?.key;
+  if (localKey) return localKey;
+
+  // 2. Check promoted members record synced from Supabase
+  const members = getPromotedMembers();
+  const m = members.find(
+    (item) =>
+      item.studentId?.toLowerCase() === clean ||
+      item.githubUsername?.toLowerCase() === clean ||
+      item.id?.toLowerCase() === clean
+  );
+
+  if (m?.adminKey) {
+    const recovered = _xorDeobfuscate(m.adminKey);
+    if (recovered) {
+      _vaultSet(identifier, recovered);
+      return recovered;
+    }
+  }
+
+  return undefined;
 };
