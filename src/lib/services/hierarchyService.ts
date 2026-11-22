@@ -144,7 +144,7 @@ export interface RoleApplication {
   statement: string;
   skills?: string[];
   portfolioUrl?: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "declined";
   reviewedBy?: string;
   reviewedAt?: string;
   created_at: string;
@@ -353,7 +353,7 @@ export const getUserApplicationStatus = async (user: {
             };
           }
 
-          const rejected = data.find((d: any) => d.status === "rejected");
+          const rejected = data.find((d: any) => d.status === "rejected" || d.status === "declined");
           if (rejected) {
             return {
               activeApp: null,
@@ -396,7 +396,7 @@ export const getUserApplicationStatus = async (user: {
     return { activeApp: pending, rejectedApp: null, isLeader: false };
   }
 
-  const rejected = userApps.find((a) => a.status === "rejected");
+  const rejected = userApps.find((a) => a.status === "rejected" || a.status === "declined");
   if (rejected) {
     return { activeApp: null, rejectedApp: rejected, isLeader: false };
   }
