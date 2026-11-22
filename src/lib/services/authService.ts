@@ -66,18 +66,60 @@ export const signOut = async () => {
 };
 
 /**
- * Send password reset email.
+ * Send password reset email with OTP token.
  */
 export const resetPassword = async (email: string) => {
   if (!isSupabaseConfigured()) {
     throw new Error('Supabase is not configured. Please set credentials in .env');
   }
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/auth?mode=reset`,
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
+  if (error) throw error;
+};
+
+/**
+ * Send password reset email to user.
+ * Dispatches the Supabase recovery email with a secure reset link.
+ */
+export const sendPasswordResetEmail = async (email: string): Promise<boolean> => {
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase is not configured. Please set credentials in .env');
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const redirectTo = typeof window !== 'undefined'
+    ? `${window.location.origin}/join?mode=recovery`
+    : undefined;
+
+  const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo,
   });
 
   if (error) throw error;
+  return true;
+};
+
+export const sendPasswordResetOtp = sendPasswordResetEmail;
+
+/**
+ * Verify recovery OTP token sent to user's email.
+ * On success, establishes a valid authenticated recovery session.
+ */
+export const verifyPasswordResetOtp = async (email: string, token: string) => {
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase is not configured. Please set credentials in .env');
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanToken = token.trim();
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: cleanEmail,
+    token: cleanToken,
+    type: 'recovery',
+  });
+
+  if (error) throw error;
+  return data;
 };
 
 /**

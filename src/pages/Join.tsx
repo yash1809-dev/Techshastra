@@ -4,7 +4,7 @@
  * • Students  → sign up (creates profile) or sign in (cookie session)
  * • Mentors / Partners → enquiry form (unchanged)
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -47,6 +47,8 @@ import { createStudent, getStudentSession } from "@/lib/studentStore";
 import { registerStudentProfile } from "@/lib/services/studentService";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { submitMembershipApplication } from "@/lib/services/applicationService";
+import { ForgotPasswordModal } from "@/components/auth/ForgotPasswordModal";
+import { supabase } from "@/lib/supabase/client";
 
 // ─── INTERESTS (reused from original) ────────────────────────────────────────
 
@@ -508,11 +510,34 @@ const SigninForm = ({ onSuccess }: { onSuccess: (username: string) => void }) =>
   const { login } = useStudentAuth();
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotStep, setForgotStep] = useState<"request" | "verify" | "reset">("request");
 
   const form = useForm<SigninData>({
     resolver: zodResolver(signinSchema),
     defaultValues: { email: "", password: "" },
   });
+
+  useEffect(() => {
+    // Automatically open "Set New Password" modal when user clicks recovery link in their email
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    if (hash.includes("type=recovery") || search.includes("mode=recovery")) {
+      setForgotStep("reset");
+      setShowForgot(true);
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setForgotStep("reset");
+        setShowForgot(true);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const onSubmit = async (data: SigninData) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -536,36 +561,62 @@ const SigninForm = ({ onSuccess }: { onSuccess: (username: string) => void }) =>
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <FormField control={form.control} name="email" render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-xs font-light tracking-widest uppercase text-foreground/50">Email</FormLabel>
-            <FormControl><Input type="email" {...field} className={inputCls} placeholder="you@example.com" /></FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
-        <FormField control={form.control} name="password" render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-xs font-light tracking-widest uppercase text-foreground/50">Password</FormLabel>
-            <FormControl>
-              <div className="relative">
-                <Input type={showPw ? "text" : "password"} {...field} className={inputCls} placeholder="Your password" />
-                <button type="button" onClick={() => setShowPw((p) => !p)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/70">
-                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+    <>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <FormField control={form.control} name="email" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-xs font-light tracking-widest uppercase text-foreground/50">Email</FormLabel>
+              <FormControl><Input type="email" {...field} className={inputCls} placeholder="you@example.com" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="password" render={({ field }) => (
+            <FormItem>
+              <div className="flex items-center justify-between">
+                <FormLabel className="text-xs font-light tracking-widest uppercase text-foreground/50">Password</FormLabel>
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  className="text-[11px] text-primary/80 hover:text-primary hover:underline transition-colors font-light tracking-wider"
+                >
+                  Forgot Password?
                 </button>
               </div>
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
-        <Button type="submit" disabled={loading}
-          className="w-full h-16 rounded-full bg-primary text-primary-foreground font-heading font-light tracking-widest uppercase text-sm hover:scale-[1.01] transition-all duration-500 shadow-2xl">
-          {loading ? "Signing In…" : <><LogIn size={16} className="mr-2" />Sign In</>}
-        </Button>
-      </form>
-    </Form>
+              <FormControl>
+                <div className="relative">
+                  <Input type={showPw ? "text" : "password"} {...field} className={inputCls} placeholder="Your password" />
+                  <button type="button" onClick={() => setShowPw((p) => !p)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground/70">
+                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <Button type="submit" disabled={loading}
+            className="w-full h-16 rounded-full bg-primary text-primary-foreground font-heading font-light tracking-widest uppercase text-sm hover:scale-[1.01] transition-all duration-500 shadow-2xl">
+            {loading ? "Signing In…" : <><LogIn size={16} className="mr-2" />Sign In</>}
+          </Button>
+        </form>
+      </Form>
+
+      <ForgotPasswordModal
+        open={showForgot}
+        onClose={() => {
+          setShowForgot(false);
+          setForgotStep("request");
+        }}
+        initialStep={forgotStep}
+        initialEmail={form.getValues("email")}
+        onSuccess={(emailReset) => {
+          setShowForgot(false);
+          setForgotStep("request");
+          form.setValue("email", emailReset);
+        }}
+      />
+    </>
   );
 };
 
