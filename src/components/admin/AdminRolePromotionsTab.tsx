@@ -213,19 +213,13 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
   };
 
   const handleRejectApplication = async (appId: string, studentName: string) => {
-    // Optimistically update UI
-    setApplications((prev) =>
-      prev.map((a) =>
-        a.id === appId
-          ? { ...a, status: "rejected" as const, reviewedBy: currentAdminName, reviewedAt: new Date().toISOString() }
-          : a
-      )
-    );
+    // Optimistically remove from UI immediately
+    setApplications((prev) => prev.filter((a) => a.id !== appId));
     try {
       await rejectRoleApplication(appId, currentAdminName);
       toast({
         title: "Application Declined",
-        description: `Application for ${studentName} was declined. The student may now apply for another role.`,
+        description: `Application for ${studentName} was declined and removed. The student may now apply for another role.`,
       });
     } catch (err: any) {
       toast({

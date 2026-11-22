@@ -174,6 +174,8 @@ export default function SuperAdmin() {
           isNewRegistration: r.is_new_registration ?? false,
         }));
         setPendingRequests(mapped);
+      } else {
+        setPendingRequests([]);
       }
 
       // Load activity logs
@@ -395,6 +397,8 @@ export default function SuperAdmin() {
 
   // ── 7. HANDLE REJECT ADMIN REQUEST ───────────────────────────────────────
   const handleReject = async (requestId: string, adminName: string) => {
+    // Optimistically remove from state immediately
+    setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
     try {
       rejectAdminLoginRequest(requestId, superAdminName);
 

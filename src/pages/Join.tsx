@@ -760,6 +760,23 @@ const Join = () => {
   const [mainTab, setMainTab] = useState("student");
   const [studentTab, setStudentTab] = useState<"signup" | "signin">("signup");
 
+  useEffect(() => {
+    // If recovery parameters or hash are present, redirect to the dedicated reset password page
+    if (
+      window.location.hash.includes("type=recovery") ||
+      window.location.search.includes("mode=recovery")
+    ) {
+      navigate("/reset-password" + window.location.hash, { replace: true });
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    if (tab === "signin") {
+      setStudentTab("signin");
+    }
+  }, [navigate]);
+
   // Already logged-in student: offer profile redirect
   const handleSuccess = (githubUsername: string) => {
     navigate(`/members/${githubUsername}`);

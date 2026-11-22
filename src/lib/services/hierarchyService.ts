@@ -482,8 +482,9 @@ export const submitRoleApplication = async (
 };
 
 /**
- * Rejects a role application in Supabase and updates local cache.
- * Frees up the student to submit a new application for another role.
+ * Rejects/declines a role application in Supabase and purges it from local cache.
+ * Completely removes the declined application so it no longer appears in the superadmin portal
+ * and frees up the student to submit a new application for another role.
  */
 export const rejectRoleApplication = async (
   appId: string,
@@ -491,25 +492,31 @@ export const rejectRoleApplication = async (
 ): Promise<void> => {
   if (isSupabaseConfigured() && supabase) {
     try {
-      await (supabase
-        .from("role_applications" as any)
-        .update({
-          status: "rejected",
-          reviewed_by: reviewerName,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", appId) as any);
+      // 1. Delete from Supabase so it's completely cleared
+      const { error: delErr } = await supabase
+        .from("role_applications")
+        .delete()
+        .eq("id", appId);
+
+      // 2. If delete was prevented by policy, fallback to updating status to 'declined'
+      if (delErr) {
+        await (supabase
+          .from("role_applications" as any)
+          .update({
+            status: "declined",
+            reviewed_by: reviewerName,
+            reviewed_at: new Date().toISOString(),
+          })
+          .eq("id", appId) as any);
+      }
     } catch (err) {
-      console.warn("Failed to reject application in Supabase:", err);
+      console.warn("Failed to delete/decline application in Supabase:", err);
     }
   }
 
+  // Purge application from local storage cache
   const raw = getRoleApplications();
-  const updated = raw.map((a) =>
-    a.id === appId
-      ? { ...a, status: "rejected" as const, reviewedBy: reviewerName, reviewedAt: new Date().toISOString() }
-      : a
-  );
+  const updated = raw.filter((a) => a.id !== appId);
   try {
     localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(updated));
   } catch {}

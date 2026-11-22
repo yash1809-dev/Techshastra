@@ -45,6 +45,7 @@ const PrivacyPolicy     = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService    = lazy(() => import("./pages/TermsOfService"));
 const Admin             = lazy(() => import("./pages/Admin"));
 const SuperAdmin        = lazy(() => import("./pages/SuperAdmin"));
+const ResetPassword     = lazy(() => import("./pages/ResetPassword"));
 
 // ─── Student Learning Hub (Lazy) ──────────────────────────────────
 const StudentLayout   = lazy(() => import("./components/student/StudentLayout"));
@@ -121,6 +122,7 @@ const App = () => (
               {/* ── Public: Lazy ─────────────────── */}
               <Route path="/about"   element={<AboutPage />} />
               <Route path="/join"    element={<Join />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/verify/:certificateId" element={<CertificateVerify />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />

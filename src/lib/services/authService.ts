@@ -73,7 +73,13 @@ export const resetPassword = async (email: string) => {
     throw new Error('Supabase is not configured. Please set credentials in .env');
   }
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
+  const redirectTo = typeof window !== 'undefined'
+    ? `${window.location.origin}/reset-password`
+    : undefined;
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+    redirectTo,
+  });
   if (error) throw error;
 };
 
@@ -88,7 +94,7 @@ export const sendPasswordResetEmail = async (email: string): Promise<boolean> =>
 
   const cleanEmail = email.trim().toLowerCase();
   const redirectTo = typeof window !== 'undefined'
-    ? `${window.location.origin}/join?mode=recovery`
+    ? `${window.location.origin}/reset-password`
     : undefined;
 
   const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
