@@ -8,6 +8,7 @@ import {
   type Problem,
   type Submission,
 } from "@/lib/codingStore";
+import { getStudentByGithub } from "@/lib/studentStore";
 import {
   executeCode,
   evaluateTestCases,
@@ -185,10 +186,14 @@ export const ProblemSolve: React.FC = () => {
       const studentUsername = session?.githubUsername || "student";
 
       const currentId = session?.studentId || session?.githubUsername || "guest";
+      const studentProfile = session?.githubUsername ? getStudentByGithub(session.githubUsername) : null;
+      const resolvedCollege = (session as any)?.college || studentProfile?.education?.[0]?.institution || "UTU Sudhowala (Main Campus)";
+
       const newSubmission = saveSubmission({
         studentId: currentId,
         studentName,
         githubUsername: studentUsername,
+        college: resolvedCollege,
         problemId: problem.id,
         problemTitle: problem.title,
         language,

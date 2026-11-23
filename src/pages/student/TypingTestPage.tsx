@@ -5,6 +5,7 @@ import {
   getTypingRecords,
   type TypingRecord,
 } from "@/lib/codingStore";
+import { getStudentByGithub } from "@/lib/studentStore";
 import {
   typingSoundEngine,
   type SoundTheme,
@@ -303,10 +304,14 @@ export const TypingTestPage: React.FC = () => {
       ? Math.max(0, Math.round(((totalTyped - typos) / totalTyped) * 100))
       : 100;
 
+    const studentProfile = session?.githubUsername ? getStudentByGithub(session.githubUsername) : null;
+    const resolvedCollege = (session as any)?.college || studentProfile?.education?.[0]?.institution || "UTU Sudhowala (Main Campus)";
+
     saveTypingRecord({
       studentId:       session?.studentId || session?.githubUsername || "guest",
       studentName:     session?.name      || "Student",
       githubUsername:  session?.githubUsername || "",
+      college:         resolvedCollege,
       wpm,
       accuracy: acc,
       errors: typos,

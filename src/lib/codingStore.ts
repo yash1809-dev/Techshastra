@@ -158,6 +158,12 @@ export function saveSubmission(submission: any): ProblemSubmission {
     (sub as any).githubUsername = submission.githubUsername || "";
     const updated = [sub, ...existing.filter((s) => s.id !== sub.id)];
     localStorage.setItem(SUBMISSIONS_STORAGE_KEY, JSON.stringify(updated));
+
+    // Asynchronously push to Supabase Cloud
+    import("./services/leaderboardService").then(({ syncSubmissionToRemote }) => {
+      syncSubmissionToRemote({ ...sub, college: submission.college });
+    }).catch(() => {});
+
     return sub;
   } catch (err) {
     console.error("Failed to save submission locally:", err);
@@ -287,6 +293,12 @@ export function saveTypingRecord(record: any): TypingScoreRecord {
     const combined = [rec, ...existing.filter((e) => e.id !== rec.id)];
     const { pruned } = pruneOldTypingRecords(combined);
     localStorage.setItem(TYPING_STORAGE_KEY, JSON.stringify(pruned));
+
+    // Asynchronously push to Supabase Cloud
+    import("./services/leaderboardService").then(({ syncTypingRecordToRemote }) => {
+      syncTypingRecordToRemote({ ...rec, college: record.college });
+    }).catch(() => {});
+
     return rec;
   } catch (err) {
     console.error("Failed to save typing record:", err);
@@ -306,14 +318,18 @@ export const PARTICIPATING_COLLEGES = [
   "Women Institute of Technology (WIT) Dehradun",
 ];
 
-export function getFullLeaderboard(currentStudentSession?: {
-  studentId: string;
-  name: string;
-  githubUsername: string;
-  college?: string;
-}): LeaderboardEntry[] {
-  const submissions = getStoredSubmissions();
-  let typingRecords = getStoredTypingRecords();
+export function getFullLeaderboard(
+  currentStudentSession?: {
+    studentId: string;
+    name: string;
+    githubUsername: string;
+    college?: string;
+  },
+  customSubmissions?: ProblemSubmission[],
+  customTypingRecords?: TypingScoreRecord[]
+): LeaderboardEntry[] {
+  const submissions = customSubmissions || getStoredSubmissions();
+  let typingRecords = customTypingRecords || getStoredTypingRecords();
   const catalog = getProblemsCatalog();
 
   // Deduplicate and heal legacy typing records that had name === currentStudentSession.name
@@ -563,13 +579,21 @@ export interface ProblemLeaderboardItem {
   badge?: "gold" | "silver" | "bronze" | "elite";
 }
 
-export function getTypingLeaderboard(currentStudentSession?: {
-  studentId: string;
-  name: string;
-  githubUsername: string;
-  college?: string;
-}): TypingLeaderboardItem[] {
-  const allRecords = getStoredTypingRecords();
+export function getTypingLeaderboard(
+  currentStudentSession?: {
+    studentId: string;
+    name: string;
+    githubUsername: string;
+    college?: string;
+  },
+  duration?: number,
+  allRecordsOverride?: TypingScoreRecord[]
+): TypingLeaderboardItem[] {
+  let allRecords = allRecordsOverride || getStoredTypingRecords();
+  if (duration) {
+    allRecords = allRecords.filter((r) => (r.durationSeconds || 30) === duration);
+  }
+
   const studentMap = new Map<string, {
     studentId: string;
     name: string;
@@ -585,6 +609,7 @@ export function getTypingLeaderboard(currentStudentSession?: {
     const gh = ((typ as any).githubUsername || typ.studentId || "student").trim();
     const name = typ.studentName || "Student";
     const key = gh.toLowerCase();
+    const recCollege = (typ as any).college || (currentStudentSession?.githubUsername?.toLowerCase() === key ? currentStudentSession.college : undefined) || "UTU Sudhowala (Main Campus)";
 
     let entry = studentMap.get(key);
     if (!entry) {
@@ -592,7 +617,7 @@ export function getTypingLeaderboard(currentStudentSession?: {
         studentId: typ.studentId || "student",
         name,
         githubUsername: gh,
-        college: "UTU Sudhowala (Main Campus)",
+        college: recCollege,
         bestWpm: typ.wpm,
         bestAccuracy: typ.accuracy,
         testCount: 1,
@@ -639,13 +664,16 @@ export function getTypingLeaderboard(currentStudentSession?: {
   });
 }
 
-export function getProblemLeaderboard(currentStudentSession?: {
-  studentId: string;
-  name: string;
-  githubUsername: string;
-  college?: string;
-}): ProblemLeaderboardItem[] {
-  const full = getFullLeaderboard(currentStudentSession);
+export function getProblemLeaderboard(
+  currentStudentSession?: {
+    studentId: string;
+    name: string;
+    githubUsername: string;
+    college?: string;
+  },
+  customSubmissions?: ProblemSubmission[]
+): ProblemLeaderboardItem[] {
+  const full = getFullLeaderboard(currentStudentSession, customSubmissions);
   const list = full
     .filter((e) => e.problemsSolved > 0 || e.codingPoints > 0)
     .map((e) => ({
