@@ -274,7 +274,7 @@ const SignupForm = ({
     setLoading(true);
     try {
       // 1. Persist directly to Supabase Backend
-      const profile = await registerStudentProfile({
+      await registerStudentProfile({
         name: data.name,
         email: data.email,
         password: data.password,
@@ -287,16 +287,6 @@ const SignupForm = ({
         interests: data.interests,
         skills: [],
       });
-
-      if (!profile) {
-        toast({
-          title: "Registration Failed",
-          description: "Database is not reachable. Please check your network or try again later.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
 
       // 2. Also keep local store updated for seamless offline/fallback
       try {

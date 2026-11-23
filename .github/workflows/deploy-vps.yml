@@ -33,8 +33,8 @@ jobs:
 
       - name: Build project
         env:
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || secrets.SUPABASE_URL || 'https://agiysgaqydnfvfdhlrvw.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnaXlzZ2FxeWRuZnZmZGhscnZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3NDkwMzQsImV4cCI6MjEwNjMyNTAzNH0.dlWoDhkuKJUG8NnfwDLcEVj4yXun3Jy6YGckJnhUFjs' }}
         run: npm run build
 
       - name: Configure SSH

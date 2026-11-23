@@ -178,10 +178,10 @@ import { getAllStudents as getLocalStudents } from '../studentStore';
 
 export const registerStudentProfile = async (
   input: RegisterStudentInput
-): Promise<FullStudentProfile | null> => {
+): Promise<FullStudentProfile> => {
   if (!isSupabaseConfigured()) {
     console.warn('[TECHSHASTRA] Backend not configured, skipping remote student registration.');
-    return null;
+    throw new Error('Database connection is not configured. Please refresh or contact admin.');
   }
 
   const rawUsername = input.githubUsername.trim();

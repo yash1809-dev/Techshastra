@@ -1,22 +1,32 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const getEnvVar = (name: string): string | undefined => {
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[name]) {
-      return import.meta.env[name];
-    }
-  } catch (_e) {}
-  try {
-    if (typeof process !== 'undefined' && process.env && process.env[name]) {
-      return process.env[name];
-    }
-  } catch (_e) {}
-  return undefined;
+// Production Supabase Cloud Credentials (Fallback for builds where CI secrets are not populated)
+const PROD_SUPABASE_URL = 'https://agiysgaqydnfvfdhlrvw.supabase.co';
+const PROD_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnaXlzZ2FxeWRuZnZmZGhscnZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3NDkwMzQsImV4cCI6MjEwNjMyNTAzNH0.dlWoDhkuKJUG8NnfwDLcEVj4yXun3Jy6YGckJnhUFjs';
+
+const getEnvVar = (val: string | undefined): string => {
+  return (val || '').trim();
 };
 
-const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+const rawUrl = getEnvVar(
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
+  (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL)
+);
+
+const rawKey = getEnvVar(
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) ||
+  (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY)
+);
+
+// Resolve effective Supabase URL and Anon Key with resilient production fallback
+export const supabaseUrl = (rawUrl && !rawUrl.includes('placeholder') && rawUrl !== 'https://your-project.supabase.co')
+  ? rawUrl
+  : PROD_SUPABASE_URL;
+
+export const supabaseAnonKey = (rawKey && !rawKey.includes('placeholder') && rawKey !== 'your-anon-key-here')
+  ? rawKey
+  : PROD_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(
