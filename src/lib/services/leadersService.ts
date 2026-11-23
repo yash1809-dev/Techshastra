@@ -145,7 +145,7 @@ export async function uploadLeaderPhoto(file: File): Promise<string> {
   const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
   const { error } = await supabase.storage
     .from("leaders-photos")
-    .upload(fileName, file, { upsert: false, contentType: file.type });
+    .upload(fileName, file, { upsert: true, contentType: file.type });
   if (error) throw new Error(error.message);
   const { data } = supabase.storage.from("leaders-photos").getPublicUrl(fileName);
   return data.publicUrl;
