@@ -61,6 +61,7 @@ import AdminProblemsTab from "@/components/admin/AdminProblemsTab";
 import { AcademicQuestionBankTab } from "@/components/admin/academic/AcademicQuestionBankTab";
 import AdminRolePromotionsTab from "@/components/admin/AdminRolePromotionsTab";
 import AdminLeadersTab from "@/components/admin/AdminLeadersTab";
+import AdminDignitariesTab from "@/components/admin/AdminDignitariesTab";
 import { canPromoteRoles } from "@/lib/services/hierarchyService";
 
 // Legacy type aliases for shapes not yet fully migrated
@@ -1516,8 +1517,13 @@ const Admin = ({ userRole }: AdminProps) => {
               </TabsTrigger>
             )}
             {!isFaculty && (
+              <TabsTrigger value="dignitaries" className="shrink-0 text-xs py-2 px-3 rounded-xl">
+                <Crown className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Home Dignitaries
+              </TabsTrigger>
+            )}
+            {!isFaculty && (
               <TabsTrigger value="leaders" className="shrink-0 text-xs py-2 px-3 rounded-xl">
-                <Users className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Leaders
+                <Users className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />About Mentors
               </TabsTrigger>
             )}
           </TabsList>
@@ -2851,7 +2857,14 @@ const Admin = ({ userRole }: AdminProps) => {
             </div>
           </TabsContent>
 
-          {/* ── Leaders & Directors ── */}
+          {/* ── Home Dignitaries & Directors ── */}
+          {!isFaculty && (
+            <TabsContent value="dignitaries">
+              <AdminDignitariesTab currentAdminName={currentUserName} />
+            </TabsContent>
+          )}
+
+          {/* ── About Mentors & Leaders ── */}
           {!isFaculty && (
             <TabsContent value="leaders">
               <AdminLeadersTab currentAdminName={currentUserName} />

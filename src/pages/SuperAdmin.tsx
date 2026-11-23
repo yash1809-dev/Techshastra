@@ -70,6 +70,7 @@ import {
 import AdminProblemsTab from "@/components/admin/AdminProblemsTab";
 import AdminRolePromotionsTab from "@/components/admin/AdminRolePromotionsTab";
 import AdminLeadersTab from "@/components/admin/AdminLeadersTab";
+import AdminDignitariesTab from "@/components/admin/AdminDignitariesTab";
 
 type SuperAdminViewState = "initializing" | "setup" | "login" | "dashboard";
 
@@ -797,9 +798,13 @@ export default function SuperAdmin() {
               <Crown className="w-3.5 h-3.5" />
               <span>Promotions & Applications</span>
             </TabsTrigger>
+            <TabsTrigger value="dignitaries" className="gap-1.5 sm:gap-2 text-xs shrink-0">
+              <Crown className="w-3.5 h-3.5" />
+              <span>Home Dignitaries</span>
+            </TabsTrigger>
             <TabsTrigger value="leaders" className="gap-1.5 sm:gap-2 text-xs shrink-0">
               <Users className="w-3.5 h-3.5" />
-              <span>Leaders & Directors</span>
+              <span>About Mentors</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1046,7 +1051,12 @@ export default function SuperAdmin() {
             <AdminRolePromotionsTab currentAdminName={superAdminName || "Super Admin"} isSuperAdmin={true} />
           </TabsContent>
 
-          {/* ── TAB 6: LEADERS & DIRECTORS ── */}
+          {/* ── TAB 6: HOME DIGNITARIES & DIRECTORS ── */}
+          <TabsContent value="dignitaries" className="space-y-4">
+            <AdminDignitariesTab currentAdminName={superAdminName || "Super Admin"} />
+          </TabsContent>
+
+          {/* ── TAB 7: ABOUT MENTORS & LEADERS ── */}
           <TabsContent value="leaders" className="space-y-4">
             <AdminLeadersTab currentAdminName={superAdminName || "Super Admin"} />
           </TabsContent>
