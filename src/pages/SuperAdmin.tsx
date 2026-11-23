@@ -69,6 +69,7 @@ import {
 } from "lucide-react";
 import AdminProblemsTab from "@/components/admin/AdminProblemsTab";
 import AdminRolePromotionsTab from "@/components/admin/AdminRolePromotionsTab";
+import AdminLeadersTab from "@/components/admin/AdminLeadersTab";
 
 type SuperAdminViewState = "initializing" | "setup" | "login" | "dashboard";
 
@@ -796,6 +797,10 @@ export default function SuperAdmin() {
               <Crown className="w-3.5 h-3.5" />
               <span>Promotions & Applications</span>
             </TabsTrigger>
+            <TabsTrigger value="leaders" className="gap-1.5 sm:gap-2 text-xs shrink-0">
+              <Users className="w-3.5 h-3.5" />
+              <span>Leaders & Directors</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* ── TAB 1: ADMIN ACCESS REQUESTS ── */}
@@ -1039,6 +1044,11 @@ export default function SuperAdmin() {
           {/* ── TAB 5: LEADERSHIP ROLE PROMOTIONS & SUCCESSION ── */}
           <TabsContent value="promotions" className="space-y-4">
             <AdminRolePromotionsTab currentAdminName={superAdminName || "Super Admin"} isSuperAdmin={true} />
+          </TabsContent>
+
+          {/* ── TAB 6: LEADERS & DIRECTORS ── */}
+          <TabsContent value="leaders" className="space-y-4">
+            <AdminLeadersTab currentAdminName={superAdminName || "Super Admin"} />
           </TabsContent>
         </Tabs>
       </main>

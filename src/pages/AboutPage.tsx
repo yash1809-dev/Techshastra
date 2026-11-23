@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,11 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Target, Eye, Cpu, Rocket, Heart, Users, Calendar, Award } from "lucide-react";
 import logoFull from "@/assets/logo-full.png";
-import mentorImg from "@/assets/mentor.jpg";
-import akhileshImg from "@/assets/akhilesh.jpg";
-import amiteshImg from "@/assets/amitesh.jpg";
+import { fetchLeaders, DEFAULT_LEADERS, Leader } from "@/lib/services/leadersService";
 
 const AboutPage = () => {
+    const [leaders, setLeaders] = useState<Leader[]>(DEFAULT_LEADERS);
+
+    useEffect(() => {
+      fetchLeaders().then((data) => {
+        if (data.length > 0) setLeaders(data);
+      });
+    }, []);
+
     const containerVariants = {
       hidden: { opacity: 0 },
       visible: {
@@ -256,18 +263,14 @@ const AboutPage = () => {
               viewport={{ once: true, margin: "-100px" }}
               className="grid md:grid-cols-3 gap-8"
             >
-              {[
-                { name: "Dr. Sandeep Singh Negi", role: "Chief Mentor & Patron", img: mentorImg, bio: "The visionary backbone of TECHSHASTRA, providing strategic guidance and academic integrity." },
-                { name: "Akhilesh Raje", role: "President", img: akhileshImg, bio: "Overseeing daily operations and leading the strategic expansion of the community." },
-                { name: "Amitesh Kumar", role: "Vice-President", img: amiteshImg, bio: "Driving technical initiatives and coordination across various internal domains." }
-              ].map((leader, idx) => (
+              {leaders.map((leader, idx) => (
                 <motion.div key={idx} variants={itemVariants}>
                   <Card className="glass border-0 overflow-hidden group h-full">
                     <CardHeader className="p-0 h-96 bg-muted relative overflow-hidden">
                       <motion.img 
                         whileHover={{ scale: 1.1 }}
                         transition={{ duration: 0.6 }}
-                        src={leader.img} 
+                        src={leader.photo_url || "https://placehold.co/400x600?text=No+Photo"} 
                         alt={leader.name} 
                         className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" 
                       />

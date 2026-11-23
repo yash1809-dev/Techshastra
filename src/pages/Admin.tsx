@@ -60,6 +60,7 @@ import { getAllStudents, updateStudent as updateStudentStore, type StudentProfil
 import AdminProblemsTab from "@/components/admin/AdminProblemsTab";
 import { AcademicQuestionBankTab } from "@/components/admin/academic/AcademicQuestionBankTab";
 import AdminRolePromotionsTab from "@/components/admin/AdminRolePromotionsTab";
+import AdminLeadersTab from "@/components/admin/AdminLeadersTab";
 import { canPromoteRoles } from "@/lib/services/hierarchyService";
 
 // Legacy type aliases for shapes not yet fully migrated
@@ -1514,6 +1515,11 @@ const Admin = ({ userRole }: AdminProps) => {
                 )}
               </TabsTrigger>
             )}
+            {!isFaculty && (
+              <TabsTrigger value="leaders" className="shrink-0 text-xs py-2 px-3 rounded-xl">
+                <Users className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" />Leaders
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* ── Overview ── */}
@@ -2844,6 +2850,13 @@ const Admin = ({ userRole }: AdminProps) => {
               </Card>
             </div>
           </TabsContent>
+
+          {/* ── Leaders & Directors ── */}
+          {!isFaculty && (
+            <TabsContent value="leaders">
+              <AdminLeadersTab currentAdminName={currentUserName} />
+            </TabsContent>
+          )}
 
           {/* ── Super Admin Panel ── */}
           {isSuperAdmin && (
