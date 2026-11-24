@@ -49,6 +49,7 @@ import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { submitMembershipApplication } from "@/lib/services/applicationService";
 import { ForgotPasswordModal } from "@/components/auth/ForgotPasswordModal";
 import { supabase } from "@/lib/supabase/client";
+import { fetchGHUser } from "@/lib/githubApi";
 
 // ─── INTERESTS (reused from original) ────────────────────────────────────────
 
@@ -273,6 +274,20 @@ const SignupForm = ({
     }
     setLoading(true);
     try {
+      // 0. Verify that the GitHub username actually exists on GitHub (catches typos)
+      try {
+        await fetchGHUser(data.githubUsername);
+      } catch (ghErr: any) {
+        if (ghErr?.message === "NOT_FOUND") {
+          form.setError("githubUsername", {
+            message: "GitHub profile not found. Please double-check for typos.",
+          });
+          setLoading(false);
+          return;
+        }
+        // If RATE_LIMITED or transient network issue, continue gracefully so user is not blocked
+      }
+
       // 1. Persist directly to Supabase Backend
       await registerStudentProfile({
         name: data.name,
@@ -332,17 +347,30 @@ const SignupForm = ({
       onSuccess(data.githubUsername);
     } catch (remoteErr: any) {
       if (remoteErr?.message === "EMAIL_EXISTS") {
-        form.setError("email", { message: "This email is already registered. Sign in instead." });
+        form.setError("email", { message: "This email is already registered. Please sign in instead." });
         return;
       }
       if (remoteErr?.message === "USERNAME_EXISTS") {
-        form.setError("githubUsername", { message: "This GitHub username is already taken. Please choose another." });
+        form.setError("githubUsername", { message: "This GitHub profile is already registered with an existing student account." });
         return;
       }
-      console.error("Supabase registration error:", remoteErr);
+      console.error("Registration error:", remoteErr);
+
+      // Clean, decorated user-friendly error message without raw database or system internals
+      const rawMsg = (remoteErr?.message || "").toLowerCase();
+      let friendlyMessage = "We couldn't create your account right now. Please check your details and try again.";
+
+      if (rawMsg.includes("network") || rawMsg.includes("failed to fetch") || rawMsg.includes("database connection")) {
+        friendlyMessage = "Connection error. Please check your internet connection and try again.";
+      } else if (rawMsg.includes("password")) {
+        friendlyMessage = "Password does not meet requirements. Please choose a stronger password.";
+      } else if (rawMsg.includes("rate limit") || rawMsg.includes("too many")) {
+        friendlyMessage = "Too many attempts. Please wait a few moments and try again.";
+      }
+
       toast({
         title: "Registration Failed",
-        description: remoteErr?.message || "Could not create account in database. Please verify your details.",
+        description: friendlyMessage,
         variant: "destructive",
       });
     } finally {
