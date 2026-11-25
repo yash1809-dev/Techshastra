@@ -57,9 +57,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   student: any;
+  inFlightOpenedAt?: number;
 }
 
-export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }) => {
+export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student, inFlightOpenedAt }) => {
   const { toast } = useToast();
 
   // Real-time promoted members state
@@ -271,6 +272,7 @@ export const RoleApplicationModal: React.FC<Props> = ({ open, onClose, student }
         statement: statement.trim(),
         skills: skillsArray,
         portfolioUrl: portfolioUrl.trim() || undefined,
+        inFlightOpenedAt: inFlightOpenedAt || Date.now(),
       });
 
       toast({

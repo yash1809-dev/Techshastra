@@ -8,6 +8,7 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { getStoredCredentials, createAdminCredential, deleteAdminCredential, type AdminRole } from "@/lib/adminStore";
 import { getAllStudents } from "@/lib/studentStore";
+import { getRoleApplicationDeadline } from "./roleDeadlineService";
 
 // ─── HIERARCHY DEFINITION ───────────────────────────────────────────────────
 
@@ -405,8 +406,29 @@ export const getUserApplicationStatus = async (user: {
 };
 
 export const submitRoleApplication = async (
-  appData: Omit<RoleApplication, "id" | "status" | "created_at">
+  appData: Omit<RoleApplication, "id" | "status" | "created_at"> & { inFlightOpenedAt?: number }
 ): Promise<RoleApplication> => {
+  // 0. Check role application deadline & window (allows in-flight submission if opened before closure)
+  const deadlineConfig = getRoleApplicationDeadline();
+  if (deadlineConfig.deadlineAt) {
+    const deadlineMs = new Date(deadlineConfig.deadlineAt).getTime();
+    const now = Date.now();
+    const inFlightOpenedAt = appData.inFlightOpenedAt;
+    const openedBeforeDeadline = inFlightOpenedAt && inFlightOpenedAt <= deadlineMs;
+
+    // Reject if expired and NOT an in-flight submission started before closure
+    if (now > deadlineMs && !openedBeforeDeadline) {
+      throw new Error("The deadline for submitting role applications has passed for this cycle.");
+    }
+  }
+
+  if (!deadlineConfig.isEnabled) {
+    const inFlightAllowed = appData.inFlightOpenedAt && appData.inFlightOpenedAt <= Date.now();
+    if (!inFlightAllowed) {
+      throw new Error("Role applications are currently closed by the administration.");
+    }
+  }
+
   // STRICT RULE: Check if user already has an active application or is an appointed leader
   const status = await getUserApplicationStatus({
     studentId: appData.studentId,

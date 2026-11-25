@@ -30,6 +30,11 @@ import {
   Palette,
   Share2,
   HeartHandshake,
+  Clock,
+  Timer,
+  Lock,
+  Unlock,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +65,14 @@ import {
   type FunctionalWing,
 } from "@/lib/services/hierarchyService";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import {
+  getRoleApplicationDeadline,
+  fetchRoleApplicationDeadlineRemote,
+  setRoleApplicationDeadlineRemote,
+  subscribeToRoleApplicationDeadline,
+  calculateTimeRemaining,
+  type RoleApplicationDeadlineConfig,
+} from "@/lib/services/roleDeadlineService";
 
 interface Props {
   currentAdminName?: string;
@@ -89,6 +102,154 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
   const [confirmRole, setConfirmRole] = useState<HierarchyRole>("functional_head");
   const [confirmWing, setConfirmWing] = useState<FunctionalWing>("technical");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // ── Application Deadline & Clock State ──
+  const [deadlineConfig, setDeadlineConfig] = useState<RoleApplicationDeadlineConfig>(() =>
+    getRoleApplicationDeadline()
+  );
+  const [selectedDatetime, setSelectedDatetime] = useState<string>("");
+  const [isUpdatingDeadline, setIsUpdatingDeadline] = useState(false);
+  const [, setClockTick] = useState(0);
+
+  useEffect(() => {
+    fetchRoleApplicationDeadlineRemote().then((cfg) => {
+      setDeadlineConfig(cfg);
+      if (cfg.deadlineAt) {
+        const d = new Date(cfg.deadlineAt);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        setSelectedDatetime(formatted);
+      }
+    });
+
+    const unsubscribe = subscribeToRoleApplicationDeadline((newCfg) => {
+      setDeadlineConfig(newCfg);
+    });
+
+    const interval = setInterval(() => {
+      setClockTick((t) => t + 1);
+    }, 1000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, []);
+
+  const timeRemaining = calculateTimeRemaining(deadlineConfig.deadlineAt, deadlineConfig.isEnabled);
+
+  const handleApplyPreset = (hoursFromNow?: number, specificTimeToday?: { h: number; m: number }) => {
+    const d = new Date();
+    if (specificTimeToday) {
+      d.setHours(specificTimeToday.h, specificTimeToday.m, 0, 0);
+      if (d.getTime() <= Date.now()) {
+        d.setDate(d.getDate() + 1);
+      }
+    } else if (hoursFromNow) {
+      d.setTime(d.getTime() + hoursFromNow * 60 * 60 * 1000);
+    }
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    setSelectedDatetime(formatted);
+  };
+
+  const handleSaveDeadline = async () => {
+    if (!selectedDatetime) {
+      toast({
+        title: "No Time Selected",
+        description: "Please choose a deadline date and time or click a quick preset.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const targetDate = new Date(selectedDatetime);
+    if (isNaN(targetDate.getTime())) {
+      toast({
+        title: "Invalid Date",
+        description: "Please select a valid date and time.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (targetDate.getTime() <= Date.now()) {
+      toast({
+        title: "Deadline Must Be in Future",
+        description: "Please choose a future time for the application deadline.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUpdatingDeadline(true);
+    try {
+      const updated = await setRoleApplicationDeadlineRemote(
+        {
+          deadlineAt: targetDate.toISOString(),
+          isEnabled: true,
+        },
+        currentAdminName
+      );
+      setDeadlineConfig(updated);
+      toast({
+        title: "Application Deadline Saved! ⏰",
+        description: `Applications will automatically close on ${targetDate.toLocaleString()}.`,
+      });
+    } catch {
+      toast({
+        title: "Failed to update deadline",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingDeadline(false);
+    }
+  };
+
+  const handleClearDeadline = async () => {
+    setIsUpdatingDeadline(true);
+    try {
+      const updated = await setRoleApplicationDeadlineRemote(
+        {
+          deadlineAt: null,
+          isEnabled: true,
+        },
+        currentAdminName
+      );
+      setDeadlineConfig(updated);
+      setSelectedDatetime("");
+      toast({
+        title: "Deadline Cleared",
+        description: "Applications are now open indefinitely without a timer.",
+      });
+    } catch {
+      toast({ title: "Failed to clear deadline", variant: "destructive" });
+    } finally {
+      setIsUpdatingDeadline(false);
+    }
+  };
+
+  const handleToggleOpenClose = async () => {
+    setIsUpdatingDeadline(true);
+    try {
+      const newEnabled = !deadlineConfig.isEnabled;
+      const updated = await setRoleApplicationDeadlineRemote(
+        {
+          isEnabled: newEnabled,
+        },
+        currentAdminName
+      );
+      setDeadlineConfig(updated);
+      toast({
+        title: newEnabled ? "Applications Reopened 🚀" : "Applications Closed 🔒",
+        description: newEnabled
+          ? "Students can now apply for leadership roles."
+          : "The 'Apply for Role' button has been disabled for all students.",
+      });
+    } catch {
+      toast({ title: "Failed to toggle status", variant: "destructive" });
+    } finally {
+      setIsUpdatingDeadline(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -330,6 +491,190 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
       {activeSubTab === "applications" && (
         <div className="space-y-4">
           
+          {/* ── Role Application Deadline & Clock Controller Card ── */}
+          <Card className="border border-border/80 bg-gradient-to-br from-card/80 to-muted/30 backdrop-blur-md rounded-2xl overflow-hidden shadow-sm">
+            <CardHeader className="p-4 sm:p-5 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-xl ${deadlineConfig.deadlineAt && !timeRemaining.isExpired ? "bg-amber-500/15 text-amber-500" : "bg-primary/10 text-primary"}`}>
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      Role Application Window &amp; Clock Controller
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-2 py-0.5 font-medium ${
+                          !deadlineConfig.isEnabled
+                            ? "border-red-500/30 text-red-500 bg-red-500/10"
+                            : deadlineConfig.deadlineAt && timeRemaining.isExpired
+                            ? "border-red-500/30 text-red-500 bg-red-500/10"
+                            : deadlineConfig.deadlineAt
+                            ? "border-amber-500/30 text-amber-500 bg-amber-500/10 animate-pulse"
+                            : "border-emerald-500/30 text-emerald-500 bg-emerald-500/10"
+                        }`}
+                      >
+                        {!deadlineConfig.isEnabled
+                          ? "Applications Closed Manually"
+                          : deadlineConfig.deadlineAt && timeRemaining.isExpired
+                          ? "Deadline Expired"
+                          : deadlineConfig.deadlineAt
+                          ? `⏳ ${timeRemaining.formatted} left to apply`
+                          : "🟢 Applications Open (No timer)"}
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Set a closure deadline with live ticking countdown (hh:mm). When the clock expires, the "Apply for Role" button grays out automatically.
+                    </CardDescription>
+                  </div>
+                </div>
+
+                {/* Main Toggle Button */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleToggleOpenClose}
+                  disabled={isUpdatingDeadline}
+                  className={`h-8 text-xs gap-1.5 rounded-xl border ${
+                    deadlineConfig.isEnabled
+                      ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
+                      : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
+                  }`}
+                >
+                  {deadlineConfig.isEnabled ? (
+                    <>
+                      <Lock size={12} /> Close Applications Now
+                    </>
+                  ) : (
+                    <>
+                      <Unlock size={12} /> Reopen Applications
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-4 sm:p-5 pt-0 space-y-3.5">
+              {/* Active Deadline Banner */}
+              {deadlineConfig.deadlineAt && (
+                <div className="p-3 rounded-xl bg-background/50 border border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="text-muted-foreground">Current Active Deadline:</span>
+                    <p className="font-semibold text-foreground flex items-center gap-1.5">
+                      <Calendar size={13} className="text-primary" />
+                      {new Date(deadlineConfig.deadlineAt).toLocaleString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      <span className="text-[11px] text-muted-foreground font-normal">
+                        ({timeRemaining.isExpired ? "Expired" : timeRemaining.fullFormatted + " remaining"})
+                      </span>
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="px-3 py-1 rounded-lg bg-primary/10 border border-primary/20 text-primary font-mono font-bold text-sm">
+                      {timeRemaining.formatted}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleClearDeadline}
+                      disabled={isUpdatingDeadline}
+                      className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1"
+                      title="Clear deadline and keep applications open indefinitely"
+                    >
+                      <RotateCcw size={12} /> Clear Timer
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Set or Update Deadline Form */}
+              <div className="space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type="datetime-local"
+                      value={selectedDatetime}
+                      onChange={(e) => setSelectedDatetime(e.target.value)}
+                      className="h-9 text-xs rounded-xl border-border bg-background/70 font-mono"
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveDeadline}
+                    disabled={isUpdatingDeadline}
+                    className="h-9 text-xs rounded-xl gap-1.5 font-medium px-4"
+                  >
+                    <Timer size={13} />
+                    <span>Set Deadline &amp; Start Clock</span>
+                  </Button>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                  <span className="text-muted-foreground text-[10px] uppercase tracking-wider mr-1">
+                    Quick Presets:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset(undefined, { h: 12, m: 0 })}
+                    className="px-2.5 py-1 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground/80 border border-border/40 transition-colors"
+                  >
+                    Today 12:00 PM
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset(undefined, { h: 18, m: 0 })}
+                    className="px-2.5 py-1 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground/80 border border-border/40 transition-colors"
+                  >
+                    Today 6:00 PM
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset(undefined, { h: 23, m: 59 })}
+                    className="px-2.5 py-1 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground/80 border border-border/40 transition-colors"
+                  >
+                    End of Today (23:59)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset(1)}
+                    className="px-2.5 py-1 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground/80 border border-border/40 transition-colors"
+                  >
+                    +1 Hour
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset(3)}
+                    className="px-2.5 py-1 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground/80 border border-border/40 transition-colors"
+                  >
+                    +3 Hours
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset(12)}
+                    className="px-2.5 py-1 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground/80 border border-border/40 transition-colors"
+                  >
+                    +12 Hours
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset(24)}
+                    className="px-2.5 py-1 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground/80 border border-border/40 transition-colors"
+                  >
+                    +24 Hours
+                  </button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Filter & Sort Controls Bar */}
           <div className="p-4 rounded-2xl glass border border-border/60 space-y-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">

@@ -27,6 +27,7 @@ import {
   ExternalLink, FileText, Printer, Loader2, AlertTriangle,
   GraduationCap, Briefcase, Award, Code2, BookOpen, Edit3,
   LogOut, ChevronRight, Copy, Check, Calendar, Users, RefreshCw, Eye, EyeOff, Key, Plus, Crown, ShieldCheck,
+  Clock, Lock,
 } from "lucide-react";
 import {
   getStudentByGithub, updateStudent, deleteStudent,
@@ -55,6 +56,13 @@ import { useStudentAuth } from "@/hooks/useStudentAuth";
 import ContributionGraph from "@/components/ContributionGraph";
 import { buildAutoProfile, profileNeedsAutoFill } from "@/lib/autoProfile";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  getRoleApplicationDeadline,
+  fetchRoleApplicationDeadlineRemote,
+  subscribeToRoleApplicationDeadline,
+  calculateTimeRemaining,
+  type RoleApplicationDeadlineConfig,
+} from "@/lib/services/roleDeadlineService";
 
 // ─── MOTION VARIANTS ─────────────────────────────────────────────────────────
 
@@ -270,6 +278,30 @@ const MemberProfile = () => {
   const [repoFilter, setRepoFilter] = useState<"top" | "all" | "starred">("top");
   const [resumeBuilderOpen, setResumeBuilderOpen] = useState(false);
   const [applyModalOpen, setApplyModalOpen] = useState(false);
+  const [inFlightOpenedAt, setInFlightOpenedAt] = useState<number | undefined>(undefined);
+  const [deadlineConfig, setDeadlineConfig] = useState<RoleApplicationDeadlineConfig>(() =>
+    getRoleApplicationDeadline()
+  );
+  const [, setClockTick] = useState(0);
+
+  // Sync role application deadline in real time
+  useEffect(() => {
+    fetchRoleApplicationDeadlineRemote().then(setDeadlineConfig);
+    const unsubscribe = subscribeToRoleApplicationDeadline((newConfig) => {
+      setDeadlineConfig(newConfig);
+    });
+    // Ticking interval to update hh:mm and countdown in real time
+    const interval = setInterval(() => {
+      setClockTick((t) => t + 1);
+    }, 1000);
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, []);
+
+  const timeRemaining = calculateTimeRemaining(deadlineConfig.deadlineAt, deadlineConfig.isEnabled);
+  const isDeadlineExpired = timeRemaining.isExpired;
   const [showAdminKey, setShowAdminKey] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   // Key value is kept in React state only — read from vault, never from member blob
@@ -687,10 +719,55 @@ const MemberProfile = () => {
                   }}>
                   <RefreshCw size={13} /> Sync GitHub
                 </Button>
-                <Button size="sm" className="rounded-full gap-2 justify-center md:justify-start text-xs font-medium bg-red-600 hover:bg-red-700 text-white shadow-sm border-0 transition-all duration-200"
-                  onClick={() => setApplyModalOpen(true)}>
-                  <Briefcase size={13} className="text-white" /> Apply for Role
-                </Button>
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <Button
+                    size="sm"
+                    disabled={isDeadlineExpired}
+                    className={`rounded-full gap-2 justify-center md:justify-start text-xs font-medium shadow-sm border-0 transition-all duration-200 ${
+                      isDeadlineExpired
+                        ? "bg-muted text-muted-foreground opacity-60 cursor-not-allowed hover:bg-muted"
+                        : "bg-red-600 hover:bg-red-700 text-white"
+                    }`}
+                    onClick={() => {
+                      if (!isDeadlineExpired) {
+                        setInFlightOpenedAt(Date.now());
+                        setApplyModalOpen(true);
+                      }
+                    }}
+                  >
+                    <Briefcase size={13} className={isDeadlineExpired ? "text-muted-foreground" : "text-white"} />
+                    {isDeadlineExpired ? "Applications Closed" : "Apply for Role"}
+                  </Button>
+
+                  {/* Deadline countdown badge */}
+                  {deadlineConfig.deadlineAt && (
+                    <div
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono border transition-all ${
+                        isDeadlineExpired
+                          ? "bg-muted/50 text-muted-foreground border-border"
+                          : timeRemaining.hours === 0 && timeRemaining.minutes < 30
+                          ? "bg-amber-500/15 text-amber-500 border-amber-500/30 animate-pulse font-semibold"
+                          : "bg-primary/10 text-primary border-primary/20"
+                      }`}
+                      title={
+                        deadlineConfig.deadlineAt
+                          ? `Deadline: ${new Date(deadlineConfig.deadlineAt).toLocaleString()}`
+                          : ""
+                      }
+                    >
+                      {isDeadlineExpired ? (
+                        <Lock size={12} className="text-muted-foreground" />
+                      ) : (
+                        <Clock size={12} className="text-primary" />
+                      )}
+                      <span>
+                        {isDeadlineExpired
+                          ? "00:00 · Closed"
+                          : `${timeRemaining.formatted} left`}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </motion.div>
@@ -1053,8 +1130,12 @@ const MemberProfile = () => {
           />
           <RoleApplicationModal
             open={applyModalOpen}
-            onClose={() => setApplyModalOpen(false)}
+            onClose={() => {
+              setApplyModalOpen(false);
+              setInFlightOpenedAt(undefined);
+            }}
             student={student}
+            inFlightOpenedAt={inFlightOpenedAt}
           />
         </>
       )}
