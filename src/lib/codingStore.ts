@@ -37,6 +37,7 @@ export interface TypingScoreRecord {
   studentId: string;
   studentName: string;
   wpm: number;
+  rawWpm?: number;
   accuracy: number;
   errors: number;
   durationSeconds: number;
@@ -280,6 +281,7 @@ export function saveTypingRecord(record: any): TypingScoreRecord {
       studentId: record.studentId || "guest",
       studentName: record.studentName || "Student",
       wpm: record.wpm,
+      rawWpm: record.rawWpm ?? record.wpm,
       accuracy: record.accuracy,
       errors: record.errors || 0,
       durationSeconds: record.durationSeconds || 30,
@@ -289,6 +291,7 @@ export function saveTypingRecord(record: any): TypingScoreRecord {
     (rec as any).githubUsername = record.githubUsername || "";
     (rec as any).totalTypos = record.totalTypos || record.errors || 0;
     (rec as any).unfixedErrors = record.unfixedErrors || 0;
+    (rec as any).rawWpm = record.rawWpm ?? record.wpm;
 
     const combined = [rec, ...existing.filter((e) => e.id !== rec.id)];
     const { pruned } = pruneOldTypingRecords(combined);
@@ -590,6 +593,10 @@ export function getTypingLeaderboard(
   allRecordsOverride?: TypingScoreRecord[]
 ): TypingLeaderboardItem[] {
   let allRecords = allRecordsOverride || getStoredTypingRecords();
+  
+  // Filter out invalid/spam runs (minimum 50% accuracy and positive WPM required for leaderboard)
+  allRecords = allRecords.filter((r) => (Number(r.wpm) || 0) > 0 && (Number(r.accuracy) || 0) >= 50);
+
   if (duration) {
     allRecords = allRecords.filter((r) => (r.durationSeconds || 30) === duration);
   }

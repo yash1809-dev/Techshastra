@@ -291,18 +291,34 @@ export const TypingTestPage: React.FC = () => {
     if (timerRef.current) clearInterval(timerRef.current);
   }, []);
 
-  // Save record after finish with authentic MonkeyType accuracy & typo count
+  // Save record after finish with authentic MonkeyType accuracy & typo penalty
   useEffect(() => {
     if (!isFinished || hasSaved.current) return;
     hasSaved.current = true;
     const elapsed = Math.max(1, selectedDuration - Math.max(0, timeLeft));
-    const wpm  = Math.max(0, Math.round((userInput.length / 5) / (elapsed / 60)));
+    
+    // MonkeyType Net WPM Calculation:
+    // Only characters matching textSnippet contribute to speed.
+    // Every unfixed typo in the text actively penalizes/deducts from the score.
+    let correctChars = 0;
+    for (let i = 0; i < userInput.length; i++) {
+      if (userInput[i] === textSnippet[i]) {
+        correctChars++;
+      }
+    }
+    const unfixed = userInput.length - correctChars;
+    const netChars = Math.max(0, correctChars - unfixed);
+
     const totalTyped = totalKeystrokesRef.current;
     const typos = totalTyposRef.current;
     // MonkeyType accuracy formula: accounts for lifetime keystroke mistakes even if backspaced and fixed
     const acc = totalTyped > 0
       ? Math.max(0, Math.round(((totalTyped - typos) / totalTyped) * 100))
       : 100;
+
+    // Disqualify / zero out score if accuracy is under 50% (prevents random spam/gibberish)
+    const wpm = acc < 50 ? 0 : Math.max(0, Math.round((netChars / 5) / (elapsed / 60)));
+    const rawWpm = Math.max(0, Math.round((userInput.length / 5) / (elapsed / 60)));
 
     const studentProfile = session?.githubUsername ? getStudentByGithub(session.githubUsername) : null;
     const resolvedCollege = (session as any)?.college || studentProfile?.education?.[0]?.institution || "UTU Sudhowala (Main Campus)";
@@ -313,14 +329,19 @@ export const TypingTestPage: React.FC = () => {
       githubUsername:  session?.githubUsername || "",
       college:         resolvedCollege,
       wpm,
+      rawWpm,
       accuracy: acc,
       errors: typos,
       totalTypos: typos,
-      unfixedErrors: errorCount,
+      unfixedErrors: unfixed,
       durationSeconds: selectedDuration,
     });
     setRecords(getTypingRecords(currentStudentId));
-    toast.success(`🎉 ${wpm} WPM · ${acc}% accuracy!`);
+    if (wpm === 0 && acc < 50) {
+      toast.error(`⚠️ Accuracy too low (${acc}%). Focus on accuracy over speed to score WPM!`);
+    } else {
+      toast.success(`🎉 ${wpm} WPM (${rawWpm} raw) · ${acc}% accuracy!`);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFinished]);
 
@@ -383,16 +404,31 @@ export const TypingTestPage: React.FC = () => {
     typingSoundEngine.setVolume(v);
   };
 
-  // Live metrics
-  const elapsed      = Math.max(1, selectedDuration - timeLeft);
-  const liveWpm      = isActive || isFinished
-    ? Math.round((userInput.length / 5) / (elapsed / 60)) || 0
-    : 0;
+  // Live metrics (MonkeyType-style net calculation with immediate loss per typo)
+  const elapsed = Math.max(1, selectedDuration - timeLeft);
+
+  let liveCorrectChars = 0;
+  for (let i = 0; i < userInput.length; i++) {
+    if (userInput[i] === textSnippet[i]) {
+      liveCorrectChars++;
+    }
+  }
+  const liveUnfixedErrors = userInput.length - liveCorrectChars;
+  const liveNetChars = Math.max(0, liveCorrectChars - liveUnfixedErrors);
+
   // Real MonkeyType accuracy: accounts for all keystrokes and typos
-  const totalTyped   = totalKeystrokesRef.current;
+  const totalTyped = totalKeystrokesRef.current;
   const liveAccuracy = totalTyped > 0
     ? Math.max(0, Math.round(((totalTyped - totalTyposRef.current) / totalTyped) * 100))
     : 100;
+
+  const liveRawWpm = (isActive || isFinished) && elapsed > 0
+    ? Math.round((userInput.length / 5) / (elapsed / 60)) || 0
+    : 0;
+
+  const liveWpm = (isActive || isFinished) && elapsed > 0
+    ? (liveAccuracy < 50 ? 0 : Math.round((liveNetChars / 5) / (elapsed / 60)) || 0)
+    : 0;
   const progress     = textSnippet.length > 0 ? (charIndex / textSnippet.length) * 100 : 0;
   const personalBest = records.length > 0 ? Math.max(...records.map((r) => r.wpm)) : 0;
   const isMuted      = soundTheme === "off";
@@ -702,10 +738,15 @@ export const TypingTestPage: React.FC = () => {
                   {timeLeft}s
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-foreground/50">
+              <div className="flex items-center gap-1.5 text-foreground/50" title="Net WPM (Penalized for every typo)">
                 <Zap size={13} className="text-primary" />
                 <span className="font-semibold text-sm text-foreground">{liveWpm}</span>
                 <span>WPM</span>
+                {liveRawWpm > liveWpm && (
+                  <span className="text-[10px] text-foreground/40 font-mono hidden sm:inline" title="Gross typing speed before typo penalties">
+                    ({liveRawWpm} raw)
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-1.5 text-foreground/50">
                 <Target size={13} className="text-emerald-400" />
@@ -834,16 +875,24 @@ export const TypingTestPage: React.FC = () => {
                   <h3 className="font-heading font-bold text-base text-foreground flex items-center gap-2">
                     <Sparkles size={16} className="text-primary" /> Test Complete!
                   </h3>
-                  <p className="text-xs text-foreground/40 font-light mt-0.5">Result saved to leaderboard.</p>
+                  <p className="text-xs text-foreground/40 font-light mt-0.5">
+                    {liveWpm > 0 ? "Result saved to official leaderboard." : "Score disqualified due to low accuracy (<50%)."}
+                  </p>
                 </div>
-                <div className="flex items-center gap-5">
+                <div className="flex items-center gap-4 sm:gap-5">
                   <div className="text-center font-mono">
-                    <p className="text-[10px] text-foreground/40 uppercase tracking-wide">Speed</p>
-                    <p className="text-2xl font-bold text-primary">{liveWpm} WPM</p>
+                    <p className="text-[10px] text-foreground/40 uppercase tracking-wide">Net WPM</p>
+                    <p className="text-2xl font-bold text-primary">{liveWpm}</p>
+                  </div>
+                  <div className="text-center font-mono">
+                    <p className="text-[10px] text-foreground/40 uppercase tracking-wide">Raw WPM</p>
+                    <p className="text-2xl font-bold text-foreground/70">{liveRawWpm}</p>
                   </div>
                   <div className="text-center font-mono">
                     <p className="text-[10px] text-foreground/40 uppercase tracking-wide">Accuracy</p>
-                    <p className="text-2xl font-bold text-emerald-400">{liveAccuracy}%</p>
+                    <p className={`text-2xl font-bold ${liveAccuracy >= 85 ? "text-emerald-400" : liveAccuracy >= 50 ? "text-amber-400" : "text-rose-400"}`}>
+                      {liveAccuracy}%
+                    </p>
                   </div>
                   <div className="text-center font-mono">
                     <p className="text-[10px] text-foreground/40 uppercase tracking-wide">Typos Made</p>
@@ -899,6 +948,11 @@ export const TypingTestPage: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-bold text-sm text-primary">{rec.wpm} WPM</span>
+                      {(rec as any).rawWpm && (rec as any).rawWpm !== rec.wpm && (
+                        <span className="text-[10px] text-foreground/40 font-mono">
+                          ({(rec as any).rawWpm} raw)
+                        </span>
+                      )}
                       <Badge variant="outline" className={`text-[9px] py-0 ${
                         rec.accuracy >= 95 ? "border-emerald-500/40 text-emerald-400"
                         : rec.accuracy >= 85 ? "border-amber-500/40 text-amber-400"
