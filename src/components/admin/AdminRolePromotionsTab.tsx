@@ -227,19 +227,63 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
     }
   };
 
+  // Dedicated action to make applications live again (clears expired timestamp and enables button)
+  const handleMakeLiveAgain = async (newDeadlineIso?: string | null) => {
+    setIsUpdatingDeadline(true);
+    try {
+      const updated = await setRoleApplicationDeadlineRemote(
+        {
+          deadlineAt: newDeadlineIso !== undefined ? newDeadlineIso : null,
+          isEnabled: true,
+        },
+        currentAdminName
+      );
+      setDeadlineConfig(updated);
+      if (newDeadlineIso) {
+        setSelectedDatetime(newDeadlineIso);
+      } else {
+        setSelectedDatetime("");
+      }
+      toast({
+        title: "Applications Are Now Live! 🟢",
+        description: newDeadlineIso
+          ? `Applications restarted and active until ${new Date(newDeadlineIso).toLocaleString()}.`
+          : "Applications reopened indefinitely. The 'Apply for Role' button is active for all students.",
+      });
+    } catch {
+      toast({
+        title: "Failed to make applications live",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingDeadline(false);
+    }
+  };
+
   const handleToggleOpenClose = async () => {
     setIsUpdatingDeadline(true);
     try {
-      const newEnabled = !deadlineConfig.isEnabled;
+      const isCurrentlyClosedOrExpired =
+        !deadlineConfig.isEnabled ||
+        (Boolean(deadlineConfig.deadlineAt) && timeRemaining.isExpired);
+      const newEnabled = isCurrentlyClosedOrExpired ? true : false;
+
+      // If reopening from an expired state, reset the deadline to null so it immediately becomes live!
+      const nextDeadline =
+        isCurrentlyClosedOrExpired && deadlineConfig.deadlineAt && timeRemaining.isExpired
+          ? null
+          : deadlineConfig.deadlineAt;
+
       const updated = await setRoleApplicationDeadlineRemote(
         {
           isEnabled: newEnabled,
+          deadlineAt: nextDeadline,
         },
         currentAdminName
       );
       setDeadlineConfig(updated);
       toast({
-        title: newEnabled ? "Applications Reopened 🚀" : "Applications Closed 🔒",
+        title: newEnabled ? "Applications Live & Open 🟢" : "Applications Closed 🔒",
         description: newEnabled
           ? "Students can now apply for leadership roles."
           : "The 'Apply for Role' button has been disabled for all students.",
@@ -529,34 +573,72 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Main Toggle Button */}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleToggleOpenClose}
-                  disabled={isUpdatingDeadline}
-                  className={`h-8 text-xs gap-1.5 rounded-xl border ${
-                    deadlineConfig.isEnabled
-                      ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
-                      : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
-                  }`}
-                >
-                  {deadlineConfig.isEnabled ? (
-                    <>
-                      <Lock size={12} /> Close Applications Now
-                    </>
+                {/* Main Action Buttons */}
+                <div className="flex items-center gap-2">
+                  {!deadlineConfig.isEnabled || (Boolean(deadlineConfig.deadlineAt) && timeRemaining.isExpired) ? (
+                    <Button
+                      size="sm"
+                      onClick={() => handleMakeLiveAgain(null)}
+                      disabled={isUpdatingDeadline}
+                      className="h-8 text-xs gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                    >
+                      <Sparkles size={12} /> Make Live Again (Open Now)
+                    </Button>
                   ) : (
-                    <>
-                      <Unlock size={12} /> Reopen Applications
-                    </>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleToggleOpenClose}
+                      disabled={isUpdatingDeadline}
+                      className="h-8 text-xs gap-1.5 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10"
+                    >
+                      <Lock size={12} /> Close Applications Now
+                    </Button>
                   )}
-                </Button>
+                </div>
               </div>
             </CardHeader>
 
             <CardContent className="p-4 sm:p-5 pt-0 space-y-3.5">
-              {/* Active Deadline Banner */}
-              {deadlineConfig.deadlineAt && (
+              {/* Expired Status Banner with Quick Restart */}
+              {deadlineConfig.deadlineAt && timeRemaining.isExpired && (
+                <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                      <Lock size={13} />
+                      Deadline Expired · Button is currently grayed out for students
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Click below to immediately restart the application window and make the button clickable again.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      onClick={() => handleMakeLiveAgain(null)}
+                      disabled={isUpdatingDeadline}
+                      className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl gap-1.5 shadow-sm"
+                    >
+                      <Sparkles size={13} /> Make Live (Open Now)
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
+                        handleMakeLiveAgain(d.toISOString());
+                      }}
+                      disabled={isUpdatingDeadline}
+                      className="h-8 text-xs rounded-xl gap-1 border-border/80"
+                    >
+                      <Clock size={12} /> Restart +2h
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Active Deadline Banner (When running and not expired) */}
+              {deadlineConfig.deadlineAt && !timeRemaining.isExpired && (
                 <div className="p-3 rounded-xl bg-background/50 border border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="space-y-0.5">
                     <span className="text-muted-foreground">Current Active Deadline:</span>
@@ -571,7 +653,7 @@ export const AdminRolePromotionsTab: React.FC<Props> = ({
                         minute: "2-digit",
                       })}
                       <span className="text-[11px] text-muted-foreground font-normal">
-                        ({timeRemaining.isExpired ? "Expired" : timeRemaining.fullFormatted + " remaining"})
+                        ({timeRemaining.fullFormatted} remaining)
                       </span>
                     </p>
                   </div>

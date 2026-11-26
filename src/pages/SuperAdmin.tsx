@@ -71,6 +71,7 @@ import AdminProblemsTab from "@/components/admin/AdminProblemsTab";
 import AdminRolePromotionsTab from "@/components/admin/AdminRolePromotionsTab";
 import AdminLeadersTab from "@/components/admin/AdminLeadersTab";
 import AdminDignitariesTab from "@/components/admin/AdminDignitariesTab";
+import AdminMembersTab from "@/components/admin/AdminMembersTab";
 
 type SuperAdminViewState = "initializing" | "setup" | "login" | "dashboard";
 
@@ -97,7 +98,7 @@ export default function SuperAdmin() {
   const [allRequests, setAllRequests] = useState<AdminLoginRequest[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminCredential[]>([]);
   const [auditLogs, setAuditLogs] = useState<LogEntry[]>([]);
-  const [activeTab, setActiveTab] = useState("requests");
+  const [activeTab, setActiveTab] = useState("members");
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -729,19 +730,24 @@ export default function SuperAdmin() {
       <main className="container mx-auto px-4 py-6 sm:py-8 max-w-6xl space-y-6">
         {/* Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          <Card className="border-amber-500/30 bg-amber-500/5">
+          <Card
+            className="border-primary/30 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+            onClick={() => setActiveTab("members")}
+          >
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-amber-600 uppercase tracking-wider">Pending Access Requests</p>
-                <p className="text-2xl font-bold mt-1 text-foreground">{pendingRequests.length}</p>
+                <p className="text-xs font-medium text-primary uppercase tracking-wider">Member Directory</p>
+                <p className="text-lg font-bold mt-1 text-foreground flex items-center gap-1.5">
+                  <UserCheck className="w-5 h-5 text-primary" /> Direct Promotions
+                </p>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center">
-                <Clock className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
+                <Users className="w-5 h-5" />
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-primary/20">
+          <Card className="border-border">
             <CardContent className="p-4 flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Registered Admins</p>
@@ -749,8 +755,8 @@ export default function SuperAdmin() {
                   {adminUsers.filter((u) => u.role === "admin").length}
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                <Users className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl bg-muted text-foreground flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5" />
               </div>
             </CardContent>
           </Card>
@@ -773,14 +779,13 @@ export default function SuperAdmin() {
         {/* Dashboard Navigation Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="w-full flex overflow-x-auto no-scrollbar justify-start bg-muted/60 p-1 border border-border/60">
-            <TabsTrigger value="requests" className="gap-1.5 sm:gap-2 text-xs shrink-0">
-              <Clock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Admin </span>Access Requests
-              {pendingRequests.length > 0 && (
-                <Badge className="h-4 px-1.5 text-[10px] bg-amber-500 text-white ml-1">
-                  {pendingRequests.length}
-                </Badge>
-              )}
+            <TabsTrigger value="members" className="gap-1.5 sm:gap-2 text-xs shrink-0 bg-primary/10 text-primary font-medium">
+              <Users className="w-3.5 h-3.5" />
+              <span>Members &amp; Direct Promotions</span>
+            </TabsTrigger>
+            <TabsTrigger value="promotions" className="gap-1.5 sm:gap-2 text-xs shrink-0 bg-amber-500/10 text-amber-500 font-medium">
+              <Crown className="w-3.5 h-3.5" />
+              <span>Promotions &amp; Applications</span>
             </TabsTrigger>
             <TabsTrigger value="directory" className="gap-1.5 sm:gap-2 text-xs shrink-0">
               <Users className="w-3.5 h-3.5" />
@@ -792,11 +797,7 @@ export default function SuperAdmin() {
             </TabsTrigger>
             <TabsTrigger value="problems" className="gap-1.5 sm:gap-2 text-xs shrink-0">
               <Code2 className="w-3.5 h-3.5" />
-              <span>Problems & Tasks</span>
-            </TabsTrigger>
-            <TabsTrigger value="promotions" className="gap-1.5 sm:gap-2 text-xs shrink-0 bg-amber-500/10 text-amber-500 font-medium">
-              <Crown className="w-3.5 h-3.5" />
-              <span>Promotions & Applications</span>
+              <span>Problems &amp; Tasks</span>
             </TabsTrigger>
             <TabsTrigger value="dignitaries" className="gap-1.5 sm:gap-2 text-xs shrink-0">
               <Crown className="w-3.5 h-3.5" />
@@ -808,103 +809,9 @@ export default function SuperAdmin() {
             </TabsTrigger>
           </TabsList>
 
-          {/* ── TAB 1: ADMIN ACCESS REQUESTS ── */}
-          <TabsContent value="requests" className="space-y-4">
-            <Card className="border-amber-500/30">
-              <CardHeader>
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <ShieldAlert className="w-5 h-5 text-amber-500" />
-                      Pending Admin Registration & Login Requests
-                    </CardTitle>
-                    <CardDescription className="text-xs mt-1">
-                      Review requests from individuals wanting to join or access the admin panel. Once approved, their account is activated immediately.
-                    </CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadDashboardData}>
-                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {pendingRequests.length === 0 ? (
-                  <div className="py-12 text-center border border-dashed border-border/80 rounded-xl bg-muted/20 space-y-2">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto opacity-80" />
-                    <p className="font-semibold text-sm">All Caught Up!</p>
-                    <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                      There are no pending admin requests right now. When someone registers at <code className="text-primary font-mono text-[11px]">/admin</code>, their request will appear here.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border/60 rounded-xl border border-amber-500/30 overflow-hidden bg-background">
-                    {pendingRequests.map((req) => (
-                      <div
-                        key={req.id}
-                        className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/20 transition-colors"
-                      >
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-sm">{req.adminName}</span>
-                            {req.isNewRegistration ? (
-                              <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/30">
-                                New Registration
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30">
-                                Login Request
-                              </Badge>
-                            )}
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              ID: {req.id.slice(-8).toUpperCase()}
-                            </span>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Phone className="w-3.5 h-3.5 text-primary" /> {req.mobile}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3.5 h-3.5 text-primary" /> DOB: {req.dob}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Laptop className="w-3.5 h-3.5 text-primary" /> {req.device || "Browser"}
-                            </span>
-                            <span className="flex items-center gap-1 text-[11px]">
-                              <Clock className="w-3 h-3" />
-                              {new Date(req.requestedAt).toLocaleString([], {
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:flex items-center gap-2 flex-shrink-0 w-full sm:w-auto pt-2 sm:pt-0">
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 text-xs h-9 sm:h-8"
-                            onClick={() => handleApprove(req)}
-                          >
-                            <Check className="w-3.5 h-3.5" /> Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="gap-1.5 text-xs h-9 sm:h-8"
-                            onClick={() => handleReject(req.id, req.adminName)}
-                          >
-                            <X className="w-3.5 h-3.5" /> Reject
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {/* ── TAB 1: MEMBERS & DIRECT PROMOTIONS ── */}
+          <TabsContent value="members" className="space-y-4">
+            <AdminMembersTab currentAdminName={superAdminName || "Super Admin"} />
           </TabsContent>
 
           {/* ── TAB 2: ADMIN DIRECTORY ── */}
